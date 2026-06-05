@@ -1,0 +1,65 @@
+# ============================================
+# GTD Gateway - Git Ignore
+# ============================================
+
+# Environment files (keep .env.example tracked)
+.env
+.env.*
+!.env.example
+
+# Local secrets (RDS CA bundle, provider private keys, certs)
+certs/
+# Ignore all files under keys/ by default (private keys, certs, etc.)
+keys/**
+# Allow directory traversal so subfolders are visible to git
+!keys/**/
+# Whitelist: only public_key.pem is safe to track
+!keys/**/public_key.pem
+
+# Documentation (internal only)
+docs/
+
+# Binaries / build output
+bin/
+gtd_gateway
+gtd_api
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go
+*.test
+*.out
+go.work
+go.work.sum
+vendor/
+
+# IDE
+.idea/
+.vscode/
+.qodo/
+.cursor/
+.kiro/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Coverage
+coverage.out
+coverage.html
+
+# Temporary files
+tmp/
+temp/
+-p/
+.claude/

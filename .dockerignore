@@ -1,0 +1,32 @@
+# Version control metadata
+.git
+.gitignore
+.gitattributes
+
+# Docs (not needed in the build context)
+*.md
+
+# Environment files (never bake secrets into the image)
+.env
+.env.*
+
+# Local secrets / certs (mounted at runtime, not built in)
+certs/
+keys/
+
+# Build output / binaries
+bin/
+*.exe
+*.exe~
+gtd_gateway
+gtd_api
+*.test
+*.out
+coverage.out
+coverage.html
+
+# IDE / OS noise
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

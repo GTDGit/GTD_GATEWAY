@@ -1,9 +1,12 @@
+networks:
+  api_gtd-network:
+    external: true
+  gtd-gateway-network:
+    driver: bridge
 services:
   gateway:
     build: .
     container_name: gtd-gateway
-    ports:
-      - "8081:8081"
     deploy:
       resources:
         limits:
@@ -13,136 +16,110 @@ services:
           cpus: '0.25'
           memory: 256M
     environment:
-      # Application
-      - PORT=8081
-      - ENV=${ENV}
-      - BASE_URL=${BASE_URL}
-      # Database - env-sourced for RDS connectivity (TLS over verify-full).
-      # DB_HOST/DB_PORT are sourced from env (the RDS endpoint:5432), never the
-      # literal internal host "postgres" — the Gateway uses RDS, not a local DB.
-      - DB_HOST=${DB_HOST}
-      - DB_PORT=${DB_PORT}
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_NAME=${DB_NAME}
-      - DB_SSLMODE=${DB_SSLMODE}
-      - DB_SSLROOTCERT=${DB_SSLROOTCERT}
-      # Redis - sourced from env. NOTE: do NOT hardcode REDIS_HOST=redis here.
-      # For the admin SSE bridge to work, the Gateway must subscribe to the SAME
-      # shared Redis instance the API publishes domain events to. Point
-      # REDIS_HOST at that shared Redis (see .env.example). The local "redis"
-      # service below exists to satisfy the compose convention (Req 5.8).
-      - REDIS_HOST=${REDIS_HOST}
-      - REDIS_PORT=${REDIS_PORT}
-      - REDIS_PASSWORD=${REDIS_PASSWORD}
-      - REDIS_DB=${REDIS_DB}
-      # Security
-      - JWT_SECRET=${JWT_SECRET}
-      # Provider credentials — required by the retained provider clients that
-      # admin retry/refund reach (PPOB retry + payment refund). The Gateway
-      # exposes no client/webhook routes, but these clients are constructed so
-      # admin-triggered retry/refund can re-execute against the providers.
-      # PPOB - Digiflazz
-      - DIGIFLAZZ_USERNAME=${DIGIFLAZZ_USERNAME}
-      - DIGIFLAZZ_KEY_PRODUCTION=${DIGIFLAZZ_KEY_PRODUCTION}
-      - DIGIFLAZZ_KEY_DEVELOPMENT=${DIGIFLAZZ_KEY_DEVELOPMENT}
-      - DIGIFLAZZ_WEBHOOK_SECRET=${DIGIFLAZZ_WEBHOOK_SECRET}
-      # PPOB - Kiosbank
-      - KIOSBANK_BASE_URL=${KIOSBANK_BASE_URL}
-      - KIOSBANK_MERCHANT_ID=${KIOSBANK_MERCHANT_ID}
-      - KIOSBANK_COUNTER_ID=${KIOSBANK_COUNTER_ID}
-      - KIOSBANK_ACCOUNT_ID=${KIOSBANK_ACCOUNT_ID}
-      - KIOSBANK_MITRA=${KIOSBANK_MITRA}
-      - KIOSBANK_USERNAME=${KIOSBANK_USERNAME}
-      - KIOSBANK_PASSWORD=${KIOSBANK_PASSWORD}
-      # PPOB - Alterra
-      - ALTERRA_BASE_URL=${ALTERRA_BASE_URL}
-      - ALTERRA_CLIENT_ID=${ALTERRA_CLIENT_ID}
-      - ALTERRA_PRIVATE_KEY_PATH=${ALTERRA_PRIVATE_KEY_PATH}
-      - ALTERRA_PRIVATE_KEY_PEM=${ALTERRA_PRIVATE_KEY_PEM}
-      - ALTERRA_CALLBACK_PUBLIC_KEY=${ALTERRA_CALLBACK_PUBLIC_KEY}
-      # Payment - Pakailink
-      - PAKAILINK_ENV=${PAKAILINK_ENV}
-      - PAKAILINK_CLIENT_ID=${PAKAILINK_CLIENT_ID}
-      - PAKAILINK_CLIENT_SECRET=${PAKAILINK_CLIENT_SECRET}
-      - PAKAILINK_PARTNER_ID=${PAKAILINK_PARTNER_ID}
-      - PAKAILINK_PRIVATE_KEY_PATH=${PAKAILINK_PRIVATE_KEY_PATH}
-      - PAKAILINK_CALLBACK_URL=${PAKAILINK_CALLBACK_URL}
-      # Payment & Disbursement - BRI Direct
-      - BRI_ENV=${BRI_ENV}
-      - BRI_BASE_URL=${BRI_BASE_URL}
-      - BRI_CLIENT_ID=${BRI_CLIENT_ID}
-      - BRI_CLIENT_SECRET=${BRI_CLIENT_SECRET}
-      - BRI_PARTNER_ID=${BRI_PARTNER_ID}
-      - BRI_CHANNEL_ID=${BRI_CHANNEL_ID}
-      - BRI_BRIVA_NUMBER=${BRI_BRIVA_NUMBER}
-      - BRI_COMPANY_CODE=${BRI_COMPANY_CODE}
-      - BRI_SOURCE_ACCOUNT=${BRI_SOURCE_ACCOUNT}
-      - BRI_PRIVATE_KEY_PATH=${BRI_PRIVATE_KEY_PATH}
-      - BRI_VA_CALLBACK_URL=${BRI_VA_CALLBACK_URL}
-      - BRI_DISB_CALLBACK_URL=${BRI_DISB_CALLBACK_URL}
-      - BRI_CONNECTOR_CLIENT_KEY=${BRI_CONNECTOR_CLIENT_KEY}
-      - BRI_CONNECTOR_PUBLIC_KEY_PATH=${BRI_CONNECTOR_PUBLIC_KEY_PATH}
-      - BRI_CONNECTOR_PUBLIC_KEY_PEM=${BRI_CONNECTOR_PUBLIC_KEY_PEM}
-      - BRI_BRIZZI_USERNAME=${BRI_BRIZZI_USERNAME}
-      - BRI_BRIZZI_DENOMINATIONS=${BRI_BRIZZI_DENOMINATIONS}
-      # Payment & Disbursement - BNC Direct / Bank Neo
-      - BNC_ENV=${BNC_ENV}
-      - BNC_CLIENT_ID=${BNC_CLIENT_ID}
-      - BNC_CLIENT_SECRET=${BNC_CLIENT_SECRET}
-      - BNC_PARTNER_ID=${BNC_PARTNER_ID}
-      - BNC_CHANNEL_ID=${BNC_CHANNEL_ID}
-      - BNC_SOURCE_ACCOUNT=${BNC_SOURCE_ACCOUNT}
-      - BNC_PRIVATE_KEY_PATH=${BNC_PRIVATE_KEY_PATH}
-      - BNC_CONNECTOR_CLIENT_KEY=${BNC_CONNECTOR_CLIENT_KEY}
-      - BNC_CONNECTOR_PUBLIC_KEY_PATH=${BNC_CONNECTOR_PUBLIC_KEY_PATH}
-      - BNC_CONNECTOR_PUBLIC_KEY_PEM=${BNC_CONNECTOR_PUBLIC_KEY_PEM}
-      - BNC_VA_CALLBACK_URL=${BNC_VA_CALLBACK_URL}
-      - BNC_DISB_CALLBACK_URL=${BNC_DISB_CALLBACK_URL}
-      # Payment - DANA Direct
-      - DANA_ENV=${DANA_ENV}
-      - DANA_MERCHANT_ID=${DANA_MERCHANT_ID}
-      - DANA_CLIENT_ID=${DANA_CLIENT_ID}
-      - DANA_CLIENT_SECRET=${DANA_CLIENT_SECRET}
-      - DANA_PARTNER_ID=${DANA_PARTNER_ID}
-      - DANA_PRIVATE_KEY_PATH=${DANA_PRIVATE_KEY_PATH}
-      - DANA_CALLBACK_URL=${DANA_CALLBACK_URL}
-      # Payment - Midtrans
-      - MIDTRANS_ENV=${MIDTRANS_ENV}
-      - MIDTRANS_SERVER_KEY=${MIDTRANS_SERVER_KEY}
-      - MIDTRANS_CLIENT_KEY=${MIDTRANS_CLIENT_KEY}
-      - MIDTRANS_MERCHANT_ID=${MIDTRANS_MERCHANT_ID}
-      - MIDTRANS_CALLBACK_URL=${MIDTRANS_CALLBACK_URL}
-      # Payment - Xendit
-      - XENDIT_API_KEY=${XENDIT_API_KEY}
-      - XENDIT_CALLBACK_TOKEN=${XENDIT_CALLBACK_TOKEN}
-      - XENDIT_CALLBACK_URL=${XENDIT_CALLBACK_URL}
+    - PORT=8081
+    - ENV=${ENV}
+    - BASE_URL=${BASE_URL}
+    - DB_HOST=${DB_HOST}
+    - DB_PORT=${DB_PORT}
+    - DB_USER=${DB_USER}
+    - DB_PASSWORD=${DB_PASSWORD}
+    - DB_NAME=${DB_NAME}
+    - DB_SSLMODE=${DB_SSLMODE}
+    - DB_SSLROOTCERT=${DB_SSLROOTCERT}
+    - REDIS_HOST=${REDIS_HOST}
+    - REDIS_PORT=${REDIS_PORT}
+    - REDIS_PASSWORD=${REDIS_PASSWORD}
+    - REDIS_DB=${REDIS_DB}
+    - JWT_SECRET=${JWT_SECRET}
+    - DIGIFLAZZ_USERNAME=${DIGIFLAZZ_USERNAME}
+    - DIGIFLAZZ_KEY_PRODUCTION=${DIGIFLAZZ_KEY_PRODUCTION}
+    - DIGIFLAZZ_KEY_DEVELOPMENT=${DIGIFLAZZ_KEY_DEVELOPMENT}
+    - DIGIFLAZZ_WEBHOOK_SECRET=${DIGIFLAZZ_WEBHOOK_SECRET}
+    - KIOSBANK_BASE_URL=${KIOSBANK_BASE_URL}
+    - KIOSBANK_MERCHANT_ID=${KIOSBANK_MERCHANT_ID}
+    - KIOSBANK_COUNTER_ID=${KIOSBANK_COUNTER_ID}
+    - KIOSBANK_ACCOUNT_ID=${KIOSBANK_ACCOUNT_ID}
+    - KIOSBANK_MITRA=${KIOSBANK_MITRA}
+    - KIOSBANK_USERNAME=${KIOSBANK_USERNAME}
+    - KIOSBANK_PASSWORD=${KIOSBANK_PASSWORD}
+    - ALTERRA_BASE_URL=${ALTERRA_BASE_URL}
+    - ALTERRA_CLIENT_ID=${ALTERRA_CLIENT_ID}
+    - ALTERRA_PRIVATE_KEY_PATH=${ALTERRA_PRIVATE_KEY_PATH}
+    - ALTERRA_PRIVATE_KEY_PEM=${ALTERRA_PRIVATE_KEY_PEM}
+    - ALTERRA_CALLBACK_PUBLIC_KEY=${ALTERRA_CALLBACK_PUBLIC_KEY}
+    - PAKAILINK_ENV=${PAKAILINK_ENV}
+    - PAKAILINK_CLIENT_ID=${PAKAILINK_CLIENT_ID}
+    - PAKAILINK_CLIENT_SECRET=${PAKAILINK_CLIENT_SECRET}
+    - PAKAILINK_PARTNER_ID=${PAKAILINK_PARTNER_ID}
+    - PAKAILINK_PRIVATE_KEY_PATH=${PAKAILINK_PRIVATE_KEY_PATH}
+    - PAKAILINK_CALLBACK_URL=${PAKAILINK_CALLBACK_URL}
+    - BRI_ENV=${BRI_ENV}
+    - BRI_BASE_URL=${BRI_BASE_URL}
+    - BRI_CLIENT_ID=${BRI_CLIENT_ID}
+    - BRI_CLIENT_SECRET=${BRI_CLIENT_SECRET}
+    - BRI_PARTNER_ID=${BRI_PARTNER_ID}
+    - BRI_CHANNEL_ID=${BRI_CHANNEL_ID}
+    - BRI_BRIVA_NUMBER=${BRI_BRIVA_NUMBER}
+    - BRI_COMPANY_CODE=${BRI_COMPANY_CODE}
+    - BRI_SOURCE_ACCOUNT=${BRI_SOURCE_ACCOUNT}
+    - BRI_PRIVATE_KEY_PATH=${BRI_PRIVATE_KEY_PATH}
+    - BRI_VA_CALLBACK_URL=${BRI_VA_CALLBACK_URL}
+    - BRI_DISB_CALLBACK_URL=${BRI_DISB_CALLBACK_URL}
+    - BRI_CONNECTOR_CLIENT_KEY=${BRI_CONNECTOR_CLIENT_KEY}
+    - BRI_CONNECTOR_PUBLIC_KEY_PATH=${BRI_CONNECTOR_PUBLIC_KEY_PATH}
+    - BRI_CONNECTOR_PUBLIC_KEY_PEM=${BRI_CONNECTOR_PUBLIC_KEY_PEM}
+    - BRI_BRIZZI_USERNAME=${BRI_BRIZZI_USERNAME}
+    - BRI_BRIZZI_DENOMINATIONS=${BRI_BRIZZI_DENOMINATIONS}
+    - BNC_ENV=${BNC_ENV}
+    - BNC_CLIENT_ID=${BNC_CLIENT_ID}
+    - BNC_CLIENT_SECRET=${BNC_CLIENT_SECRET}
+    - BNC_PARTNER_ID=${BNC_PARTNER_ID}
+    - BNC_CHANNEL_ID=${BNC_CHANNEL_ID}
+    - BNC_SOURCE_ACCOUNT=${BNC_SOURCE_ACCOUNT}
+    - BNC_PRIVATE_KEY_PATH=${BNC_PRIVATE_KEY_PATH}
+    - BNC_CONNECTOR_CLIENT_KEY=${BNC_CONNECTOR_CLIENT_KEY}
+    - BNC_CONNECTOR_PUBLIC_KEY_PATH=${BNC_CONNECTOR_PUBLIC_KEY_PATH}
+    - BNC_CONNECTOR_PUBLIC_KEY_PEM=${BNC_CONNECTOR_PUBLIC_KEY_PEM}
+    - BNC_VA_CALLBACK_URL=${BNC_VA_CALLBACK_URL}
+    - BNC_DISB_CALLBACK_URL=${BNC_DISB_CALLBACK_URL}
+    - DANA_ENV=${DANA_ENV}
+    - DANA_MERCHANT_ID=${DANA_MERCHANT_ID}
+    - DANA_CLIENT_ID=${DANA_CLIENT_ID}
+    - DANA_CLIENT_SECRET=${DANA_CLIENT_SECRET}
+    - DANA_PARTNER_ID=${DANA_PARTNER_ID}
+    - DANA_PRIVATE_KEY_PATH=${DANA_PRIVATE_KEY_PATH}
+    - DANA_CALLBACK_URL=${DANA_CALLBACK_URL}
+    - MIDTRANS_ENV=${MIDTRANS_ENV}
+    - MIDTRANS_SERVER_KEY=${MIDTRANS_SERVER_KEY}
+    - MIDTRANS_CLIENT_KEY=${MIDTRANS_CLIENT_KEY}
+    - MIDTRANS_MERCHANT_ID=${MIDTRANS_MERCHANT_ID}
+    - MIDTRANS_CALLBACK_URL=${MIDTRANS_CALLBACK_URL}
+    - XENDIT_API_KEY=${XENDIT_API_KEY}
+    - XENDIT_CALLBACK_TOKEN=${XENDIT_CALLBACK_TOKEN}
+    - XENDIT_CALLBACK_URL=${XENDIT_CALLBACK_URL}
+    networks:
+    - gtd-gateway-network
+    - api_gtd-network
+    ports:
+    - 8081:8081
+    restart: unless-stopped
     volumes:
-      # RDS CA bundle (read-only) for verify-full TLS to RDS.
-      - ./certs:/app/certs:ro
-      # Provider private keys (read-only) needed by admin retry/refund signing.
-      - ./keys:/app/keys:ro
-    restart: unless-stopped
-    networks:
-      - gtd-gateway-network
-
-  # Local redis service defined to satisfy the compose convention (Req 5.8).
-  # IMPORTANT: for the admin SSE bridge the Gateway's REDIS_HOST should point at
-  # the SHARED Redis instance the API publishes events to — not necessarily this
-  # per-stack container. See the REDIS_HOST note in .env.example.
+    - ./certs:/app/certs:ro
+    - ./keys:/app/keys:ro
   redis:
-    image: redis:7-alpine
-    container_name: gtd-gateway-redis
     command: redis-server --requirepass ${REDIS_PASSWORD}
+    container_name: gtd-gateway-redis
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 5s
-      timeout: 3s
       retries: 5
-    restart: unless-stopped
+      test:
+      - CMD
+      - redis-cli
+      - -a
+      - ${REDIS_PASSWORD}
+      - ping
+      timeout: 3s
+    image: redis:7-alpine
     networks:
-      - gtd-gateway-network
-
-networks:
-  gtd-gateway-network:
-    driver: bridge
+    - gtd-gateway-network
+    restart: unless-stopped

@@ -6,8 +6,58 @@ import (
 	"strings"
 
 	"github.com/GTDGit/gtd_gateway/internal/models"
-	"github.com/GTDGit/gtd_gateway/pkg/alterra"
-	"github.com/GTDGit/gtd_gateway/pkg/kiosbank"
+)
+
+// Alterra RC constants (inlined from pkg/alterra).
+const (
+	alterraRCWrongNumber        = "20"
+	alterraRCProductIssue       = "21"
+	alterraRCDuplicateOrder     = "22"
+	alterraRCConnectionTimeout  = "23"
+	alterraRCProviderCutoff     = "24"
+	alterraRCKWHOverlimit       = "25"
+	alterraRCPaymentOverlimit   = "26"
+	alterraRCBillPaidOrNotFound = "50"
+	alterraRCInvalidInquiry     = "51"
+	alterraRCCanceledByOps      = "98"
+	alterraRCGeneralError       = "99"
+)
+
+// Kiosbank RC constants (inlined from pkg/kiosbank).
+const (
+	kiosbankRCNoResponseFromBiller = "04"
+	kiosbankRCTimeout              = "39"
+	kiosbankRCNoResponseFromHost   = "05"
+	kiosbankRCStorageIssue         = "14"
+	kiosbankRCNotRegistered        = "18"
+	kiosbankRCBillerLinkDown       = "38"
+	kiosbankRCCutOff               = "85"
+	kiosbankRCUnknownProduct       = "15"
+	kiosbankRCDataNotFound         = "19"
+	kiosbankRCPayAtOffice          = "60"
+	kiosbankRCBillNotAvailable     = "62"
+	kiosbankRCNoDataOrPaid         = "80"
+	kiosbankRCAlreadyPaid          = "64"
+	kiosbankRCAlreadySettled       = "74"
+	kiosbankRCInvalidCustomer      = "65"
+	kiosbankRCExpiredNumber        = "78"
+	kiosbankRCDailyLimitReached    = "68"
+	kiosbankRCNumberNotAllowed     = "69"
+	kiosbankRCBlocked              = "83"
+	kiosbankRCInvalidAmount        = "70"
+	kiosbankRCExceedsMaxPayment    = "72"
+	kiosbankRCExceedsMaxTunggakan  = "79"
+	kiosbankRCInquiryRequired      = "61"
+	kiosbankRCExpired              = "46"
+	kiosbankRCMinInterval          = "75"
+	kiosbankRCFormatError          = "02"
+	kiosbankRCAdminError           = "37"
+	kiosbankRCUnknownMessage       = "40"
+	kiosbankRCInvalidPrice         = "42"
+	kiosbankRCInsufficientBalance  = "12"
+	kiosbankRCTransactionFailed    = "17"
+	kiosbankRCNotAuthorized        = "41"
+	kiosbankRCDuplicateRef         = "86"
 )
 
 type ProviderFailurePhase string
@@ -240,25 +290,25 @@ func canonicalAlterraFailure(resp *ProviderResponse) CanonicalProviderFailure {
 	lowerRawMessage := strings.ToLower(rawMessage)
 
 	switch {
-	case lowerRC == alterra.RCWrongNumber:
+	case lowerRC == alterraRCWrongNumber:
 		return GetCanonicalProviderFailure(ProviderFailureInvalidCustomer)
-	case lowerRC == alterra.RCProductIssue:
+	case lowerRC == alterraRCProductIssue:
 		return GetCanonicalProviderFailure(ProviderFailureProductUnavailable)
-	case lowerRC == alterra.RCDuplicateOrder:
+	case lowerRC == alterraRCDuplicateOrder:
 		return GetCanonicalProviderFailure(ProviderFailureDuplicateTransaction)
-	case lowerRC == alterra.RCConnectionTimeout:
+	case lowerRC == alterraRCConnectionTimeout:
 		return GetCanonicalProviderFailure(ProviderFailureProviderTimeout)
-	case lowerRC == alterra.RCProviderCutoff:
+	case lowerRC == alterraRCProviderCutoff:
 		return GetCanonicalProviderFailure(ProviderFailureProviderUnavailable)
-	case lowerRC == alterra.RCKWHOverlimit || lowerRC == alterra.RCPaymentOverlimit:
+	case lowerRC == alterraRCKWHOverlimit || lowerRC == alterraRCPaymentOverlimit:
 		return GetCanonicalProviderFailure(ProviderFailureLimitExceeded)
-	case lowerRC == alterra.RCBillPaidOrNotFound:
+	case lowerRC == alterraRCBillPaidOrNotFound:
 		return GetCanonicalProviderFailure(ProviderFailureAlreadyPaid)
-	case lowerRC == alterra.RCInvalidInquiry:
+	case lowerRC == alterraRCInvalidInquiry:
 		return GetCanonicalProviderFailure(ProviderFailureInquiryNotFound)
-	case lowerRC == alterra.RCCanceledByOps:
+	case lowerRC == alterraRCCanceledByOps:
 		return GetCanonicalProviderFailure(ProviderFailureOrderCanceled)
-	case lowerRC == alterra.RCGeneralError:
+	case lowerRC == alterraRCGeneralError:
 		return GetCanonicalProviderFailure(ProviderFailureGeneralProviderError)
 	case strings.Contains(lowerRC, "product_closed"), strings.Contains(lowerRawCode, "product_closed"), strings.Contains(lowerMessage, "product closed"), strings.Contains(lowerRawMessage, "product closed"), httpStatus == 450:
 		return GetCanonicalProviderFailure(ProviderFailureProductUnavailable)
@@ -312,75 +362,75 @@ func canonicalKiosbankFailure(phase ProviderFailurePhase, resp *ProviderResponse
 	switch phase {
 	case ProviderFailurePhaseInquiry:
 		switch rc {
-		case kiosbank.RCNoResponseFromBiller, kiosbank.RCTimeout:
+		case kiosbankRCNoResponseFromBiller, kiosbankRCTimeout:
 			return GetCanonicalProviderFailure(ProviderFailureProviderTimeout)
-		case kiosbank.RCNoResponseFromHost, kiosbank.RCStorageIssue, kiosbank.RCNotRegistered, kiosbank.RCBillerLinkDown, kiosbank.RCCutOff:
+		case kiosbankRCNoResponseFromHost, kiosbankRCStorageIssue, kiosbankRCNotRegistered, kiosbankRCBillerLinkDown, kiosbankRCCutOff:
 			return GetCanonicalProviderFailure(ProviderFailureProviderUnavailable)
-		case kiosbank.RCUnknownProduct:
+		case kiosbankRCUnknownProduct:
 			return GetCanonicalProviderFailure(ProviderFailureUpstreamRequestInvalid)
-		case kiosbank.RCDataNotFound:
+		case kiosbankRCDataNotFound:
 			return GetCanonicalProviderFailure(ProviderFailureInquiryNotFound)
-		case kiosbank.RCPayAtOffice, kiosbank.RCBillNotAvailable, kiosbank.RCNoDataOrPaid:
+		case kiosbankRCPayAtOffice, kiosbankRCBillNotAvailable, kiosbankRCNoDataOrPaid:
 			return GetCanonicalProviderFailure(ProviderFailureBillUnavailable)
-		case kiosbank.RCAlreadyPaid, kiosbank.RCAlreadySettled:
+		case kiosbankRCAlreadyPaid, kiosbankRCAlreadySettled:
 			return GetCanonicalProviderFailure(ProviderFailureAlreadyPaid)
-		case kiosbank.RCInvalidCustomer, kiosbank.RCExpiredNumber:
+		case kiosbankRCInvalidCustomer, kiosbankRCExpiredNumber:
 			return GetCanonicalProviderFailure(ProviderFailureInvalidCustomer)
-		case kiosbank.RCDailyLimitReached, kiosbank.RCNumberNotAllowed, kiosbank.RCBlocked:
+		case kiosbankRCDailyLimitReached, kiosbankRCNumberNotAllowed, kiosbankRCBlocked:
 			return GetCanonicalProviderFailure(ProviderFailureCustomerRestricted)
-		case kiosbank.RCInvalidAmount:
+		case kiosbankRCInvalidAmount:
 			return GetCanonicalProviderFailure(ProviderFailureInvalidAmount)
-		case kiosbank.RCExceedsMaxPayment, kiosbank.RCExceedsMaxTunggakan:
+		case kiosbankRCExceedsMaxPayment, kiosbankRCExceedsMaxTunggakan:
 			return GetCanonicalProviderFailure(ProviderFailureLimitExceeded)
-		case kiosbank.RCInquiryRequired:
+		case kiosbankRCInquiryRequired:
 			return GetCanonicalProviderFailure(ProviderFailureInquiryRequired)
-		case kiosbank.RCExpired:
+		case kiosbankRCExpired:
 			return GetCanonicalProviderFailure(ProviderFailureRequestExpired)
-		case kiosbank.RCMinInterval:
+		case kiosbankRCMinInterval:
 			return GetCanonicalProviderFailure(ProviderFailureCooldownActive)
-		case kiosbank.RCFormatError, kiosbank.RCAdminError, kiosbank.RCUnknownMessage, kiosbank.RCInvalidPrice:
+		case kiosbankRCFormatError, kiosbankRCAdminError, kiosbankRCUnknownMessage, kiosbankRCInvalidPrice:
 			return GetCanonicalProviderFailure(ProviderFailureUpstreamRequestInvalid)
-		case kiosbank.RCInsufficientBalance:
+		case kiosbankRCInsufficientBalance:
 			return GetCanonicalProviderFailure(ProviderFailureProviderBalanceInsufficient)
 		default:
 			return GetCanonicalProviderFailure(ProviderFailureGeneralProviderError)
 		}
 	case ProviderFailurePhaseAsync:
-		if rc == kiosbank.RCTransactionFailed {
+		if rc == kiosbankRCTransactionFailed {
 			return GetCanonicalProviderFailure(ProviderFailureGeneralProviderError)
 		}
 		return GetCanonicalProviderFailure(ProviderFailureProviderUnavailable)
 	default:
 		switch rc {
-		case kiosbank.RCTransactionFailed:
+		case kiosbankRCTransactionFailed:
 			return GetCanonicalProviderFailure(ProviderFailureGeneralProviderError)
-		case kiosbank.RCInsufficientBalance:
+		case kiosbankRCInsufficientBalance:
 			return GetCanonicalProviderFailure(ProviderFailureProviderBalanceInsufficient)
-		case kiosbank.RCUnknownProduct, kiosbank.RCInvalidPrice, kiosbank.RCFormatError, kiosbank.RCAdminError, kiosbank.RCUnknownMessage:
+		case kiosbankRCUnknownProduct, kiosbankRCInvalidPrice, kiosbankRCFormatError, kiosbankRCAdminError, kiosbankRCUnknownMessage:
 			return GetCanonicalProviderFailure(ProviderFailureUpstreamRequestInvalid)
-		case kiosbank.RCNotRegistered, kiosbank.RCCutOff:
+		case kiosbankRCNotRegistered, kiosbankRCCutOff:
 			return GetCanonicalProviderFailure(ProviderFailureProviderUnavailable)
-		case kiosbank.RCNotAuthorized:
+		case kiosbankRCNotAuthorized:
 			return GetCanonicalProviderFailure(ProviderFailureProductUnavailable)
-		case kiosbank.RCExpired:
+		case kiosbankRCExpired:
 			return GetCanonicalProviderFailure(ProviderFailureRequestExpired)
-		case kiosbank.RCPayAtOffice, kiosbank.RCBillNotAvailable, kiosbank.RCNoDataOrPaid:
+		case kiosbankRCPayAtOffice, kiosbankRCBillNotAvailable, kiosbankRCNoDataOrPaid:
 			return GetCanonicalProviderFailure(ProviderFailureBillUnavailable)
-		case kiosbank.RCInquiryRequired:
+		case kiosbankRCInquiryRequired:
 			return GetCanonicalProviderFailure(ProviderFailureInquiryRequired)
-		case kiosbank.RCAlreadyPaid, kiosbank.RCAlreadySettled:
+		case kiosbankRCAlreadyPaid, kiosbankRCAlreadySettled:
 			return GetCanonicalProviderFailure(ProviderFailureAlreadyPaid)
-		case kiosbank.RCInvalidCustomer, kiosbank.RCExpiredNumber:
+		case kiosbankRCInvalidCustomer, kiosbankRCExpiredNumber:
 			return GetCanonicalProviderFailure(ProviderFailureInvalidCustomer)
-		case kiosbank.RCDailyLimitReached, kiosbank.RCNumberNotAllowed, kiosbank.RCBlocked:
+		case kiosbankRCDailyLimitReached, kiosbankRCNumberNotAllowed, kiosbankRCBlocked:
 			return GetCanonicalProviderFailure(ProviderFailureCustomerRestricted)
-		case kiosbank.RCInvalidAmount:
+		case kiosbankRCInvalidAmount:
 			return GetCanonicalProviderFailure(ProviderFailureInvalidAmount)
-		case kiosbank.RCExceedsMaxPayment, kiosbank.RCExceedsMaxTunggakan:
+		case kiosbankRCExceedsMaxPayment, kiosbankRCExceedsMaxTunggakan:
 			return GetCanonicalProviderFailure(ProviderFailureLimitExceeded)
-		case kiosbank.RCMinInterval:
+		case kiosbankRCMinInterval:
 			return GetCanonicalProviderFailure(ProviderFailureCooldownActive)
-		case kiosbank.RCDuplicateRef:
+		case kiosbankRCDuplicateRef:
 			return GetCanonicalProviderFailure(ProviderFailureDuplicateTransaction)
 		default:
 			return GetCanonicalProviderFailure(ProviderFailureGeneralProviderError)

@@ -73,27 +73,28 @@ const (
 // ----------------------------------------------------------------------------
 
 type PaymentMethod struct {
-	ID                 int                `db:"id" json:"id"`
-	Type               PaymentType        `db:"type" json:"type"`
-	Code               string             `db:"code" json:"code"`
-	Name               string             `db:"name" json:"name"`
-	Provider           PaymentProvider    `db:"provider" json:"provider"`
-	FeeType            FeeType            `db:"fee_type" json:"feeType"`
-	FeeFlat            int                `db:"fee_flat" json:"feeFlat"`
-	FeePercent         float64            `db:"fee_percent" json:"feePercent"`
-	FeeMin             int                `db:"fee_min" json:"feeMin"`
-	FeeMax             int                `db:"fee_max" json:"feeMax"`
-	MinAmount          int                `db:"min_amount" json:"minAmount"`
-	MaxAmount          int                `db:"max_amount" json:"maxAmount"`
-	ExpiredDuration    int                `db:"expired_duration" json:"expiredDuration"`
-	LogoURL            *string            `db:"logo_url" json:"logoUrl,omitempty"`
-	DisplayOrder       int                `db:"display_order" json:"displayOrder"`
-	PaymentInstruction NullableRawMessage `db:"payment_instruction" json:"paymentInstruction,omitempty"`
-	IsActive           bool               `db:"is_active" json:"isActive"`
-	IsMaintenance      bool               `db:"is_maintenance" json:"isMaintenance"`
-	MaintenanceMessage *string            `db:"maintenance_message" json:"maintenanceMessage,omitempty"`
-	CreatedAt          time.Time          `db:"created_at" json:"createdAt"`
-	UpdatedAt          time.Time          `db:"updated_at" json:"updatedAt"`
+	ID                  int                `db:"id" json:"id"`
+	Type                PaymentType        `db:"type" json:"type"`
+	Code                string             `db:"code" json:"code"`
+	Name                string             `db:"name" json:"name"`
+	Provider            PaymentProvider    `db:"provider" json:"provider"`
+	ProviderDisplayName *string            `db:"provider_display_name" json:"providerDisplayName,omitempty"`
+	FeeType             FeeType            `db:"fee_type" json:"feeType"`
+	FeeFlat             int                `db:"fee_flat" json:"feeFlat"`
+	FeePercent          float64            `db:"fee_percent" json:"feePercent"`
+	FeeMin              int                `db:"fee_min" json:"feeMin"`
+	FeeMax              int                `db:"fee_max" json:"feeMax"`
+	MinAmount           int                `db:"min_amount" json:"minAmount"`
+	MaxAmount           int                `db:"max_amount" json:"maxAmount"`
+	ExpiredDuration     int                `db:"expired_duration" json:"expiredDuration"`
+	LogoURL             *string            `db:"logo_url" json:"logoUrl,omitempty"`
+	DisplayOrder        int                `db:"display_order" json:"displayOrder"`
+	PaymentInstruction  NullableRawMessage `db:"payment_instruction" json:"paymentInstruction,omitempty"`
+	IsActive            bool               `db:"is_active" json:"isActive"`
+	IsMaintenance       bool               `db:"is_maintenance" json:"isMaintenance"`
+	MaintenanceMessage  *string            `db:"maintenance_message" json:"maintenanceMessage,omitempty"`
+	CreatedAt           time.Time          `db:"created_at" json:"createdAt"`
+	UpdatedAt           time.Time          `db:"updated_at" json:"updatedAt"`
 }
 
 // CalculateFee applies fee_type/flat/percent/min/max rules against the base amount.

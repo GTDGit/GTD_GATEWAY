@@ -67,11 +67,6 @@ type CreatePaymentRequest struct {
 	Metadata      json.RawMessage `json:"metadata,omitempty"`
 }
 
-type CreateRefundRequest struct {
-	Amount int64  `json:"amount"`
-	Reason string `json:"reason"`
-}
-
 // PaymentResponse is the shape returned on create/get endpoints.
 type PaymentResponse struct {
 	PaymentID          string          `json:"paymentId"`
@@ -439,108 +434,6 @@ func (s *PaymentService) CancelPayment(ctx context.Context, paymentID string, cl
 }
 
 // ----------------------------------------------------------------------------
-// Refund
-// ----------------------------------------------------------------------------
-
-func (s *PaymentService) RefundPayment(ctx context.Context, paymentID string, clientID int, req *CreateRefundRequest) (*models.Refund, error) {
-	if req == nil || req.Amount <= 0 {
-		return nil, newPaymentError(400, "INVALID_AMOUNT", "amount must be positive", nil)
-	}
-	p, err := s.paymentRepo.GetByPaymentID(ctx, strings.TrimSpace(paymentID))
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, newPaymentError(404, "PAYMENT_NOT_FOUND", "Payment not found", nil)
-		}
-		return nil, err
-	}
-	if clientID != 0 && p.ClientID != clientID {
-		return nil, newPaymentError(404, "PAYMENT_NOT_FOUND", "Payment not found", nil)
-	}
-	if p.Status != models.PaymentStatusPaid && p.Status != models.PaymentStatusPartialRefund {
-		return nil, newPaymentError(400, "INVALID_PAYMENT_STATE", "Only paid payments can be refunded", nil)
-	}
-
-	// Sum previous refunds.
-	prev, err := s.paymentRepo.ListRefundsByPaymentID(ctx, p.ID)
-	if err != nil {
-		return nil, err
-	}
-	var refunded int64
-	for _, r := range prev {
-		if r.Status == models.RefundStatusSuccess || r.Status == models.RefundStatusProcessing {
-			refunded += r.Amount
-		}
-	}
-	if refunded+req.Amount > p.Amount {
-		return nil, newPaymentError(400, "AMOUNT_TOO_HIGH", "Refund amount exceeds paid amount", nil)
-	}
-
-	refund := &models.Refund{
-		PaymentID: p.ID,
-		Amount:    req.Amount,
-		Status:    models.RefundStatusPending,
-		Reason:    req.Reason,
-	}
-	if err := s.createRefundWithGeneratedID(ctx, refund); err != nil {
-		return nil, err
-	}
-
-	provider, err := s.router.Get(p.Provider)
-	if err != nil {
-		now := time.Now()
-		refund.Status = models.RefundStatusFailed
-		refund.ProcessedAt = &now
-		_ = s.paymentRepo.UpdateRefund(ctx, refund)
-		return nil, err
-	}
-
-	refund.Status = models.RefundStatusProcessing
-	_ = s.paymentRepo.UpdateRefund(ctx, refund)
-
-	providerResp, providerErr := provider.RefundPayment(ctx, p, refund)
-	now := time.Now()
-	refund.ProcessedAt = &now
-	if providerErr != nil {
-		refund.Status = models.RefundStatusFailed
-		_ = s.paymentRepo.UpdateRefund(ctx, refund)
-		return refund, providerErr
-	}
-	refund.Status = models.RefundStatusSuccess
-	if providerResp != nil {
-		if providerResp.ProviderRef != "" {
-			v := providerResp.ProviderRef
-			refund.ProviderRef = &v
-		}
-		if len(providerResp.RawResponse) > 0 {
-			refund.ProviderData = models.NullableRawMessage(providerResp.RawResponse)
-		}
-	}
-	if err := s.paymentRepo.UpdateRefund(ctx, refund); err != nil {
-		return refund, err
-	}
-
-	// Update payment status.
-	newRefunded := refunded + req.Amount
-	if newRefunded >= p.Amount {
-		p.Status = models.PaymentStatusRefunded
-	} else {
-		p.Status = models.PaymentStatusPartialRefund
-	}
-	if err := s.paymentRepo.UpdatePayment(ctx, p); err != nil {
-		return refund, err
-	}
-	if s.notifier != nil {
-		s.notifier.NotifyPaymentStatusChanged(p)
-	}
-	event := "payment.refunded"
-	if p.Status == models.PaymentStatusPartialRefund {
-		event = "payment.partial_refund"
-	}
-	go s.EnqueueCallback(context.Background(), p, event)
-	return refund, nil
-}
-
-// ----------------------------------------------------------------------------
 // Workers hooks
 // ----------------------------------------------------------------------------
 
@@ -657,21 +550,6 @@ func (s *PaymentService) createPaymentWithGeneratedID(ctx context.Context, p *mo
 			if isReferenceUniqueViolation(lastErr) {
 				return newPaymentError(400, "DUPLICATE_REFERENCE_ID", "Reference ID already exists", lastErr)
 			}
-			return lastErr
-		}
-	}
-	return lastErr
-}
-
-func (s *PaymentService) createRefundWithGeneratedID(ctx context.Context, r *models.Refund) error {
-	var lastErr error
-	for i := 0; i < 5; i++ {
-		r.RefundID = newPaymentPublicID("REF")
-		lastErr = s.paymentRepo.CreateRefund(ctx, r)
-		if lastErr == nil {
-			return nil
-		}
-		if !isUniqueViolation(lastErr) {
 			return lastErr
 		}
 	}

@@ -266,7 +266,6 @@ func setupRoutes(router *gin.Engine, handlers *Handlers, jwtMiddleware *middlewa
 		admin.GET("/payments/:id/logs", handlers.AdminPayment.GetPaymentLogs)
 		admin.GET("/payments/:id/callbacks", handlers.AdminPayment.GetPaymentCallbacks)
 		admin.GET("/payments/:id/callback-logs", handlers.AdminPayment.ListCallbackLogs)
-		admin.GET("/payments/:id/refunds", handlers.AdminPayment.ListRefunds)
 		admin.POST("/payments/:id/retry-callback", handlers.AdminPayment.RetryCallback)
 		admin.POST("/payments/:id/refund", handlers.AdminPayment.Refund)
 

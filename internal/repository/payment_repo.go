@@ -242,7 +242,7 @@ func (r *PaymentRepository) MarkPaymentCallbackSent(ctx context.Context, payment
 // PaymentMethod access
 // ----------------------------------------------------------------------------
 
-const methodColumns = `id, type, code, name, provider, fee_type, fee_flat, fee_percent,
+const methodColumns = `id, type, code, name, provider, provider_display_name, fee_type, fee_flat, fee_percent,
     fee_min, fee_max, min_amount, max_amount, expired_duration, logo_url,
     display_order, payment_instruction, is_active, is_maintenance,
     maintenance_message, created_at, updated_at`
@@ -292,14 +292,14 @@ func (r *PaymentRepository) ListAllMethods(ctx context.Context) ([]models.Paymen
 // UpdateMethod persists admin-editable fields of a payment method.
 func (r *PaymentRepository) UpdateMethod(ctx context.Context, m *models.PaymentMethod) error {
 	q := `UPDATE payment_methods SET
-        provider = $2, fee_type = $3, fee_flat = $4, fee_percent = $5,
-        fee_min = $6, fee_max = $7, min_amount = $8, max_amount = $9,
-        expired_duration = $10, logo_url = $11, display_order = $12,
-        payment_instruction = $13, is_active = $14, is_maintenance = $15,
-        maintenance_message = $16, updated_at = NOW()
+        provider = $2, provider_display_name = $3, fee_type = $4, fee_flat = $5, fee_percent = $6,
+        fee_min = $7, fee_max = $8, min_amount = $9, max_amount = $10,
+        expired_duration = $11, logo_url = $12, display_order = $13,
+        payment_instruction = $14, is_active = $15, is_maintenance = $16,
+        maintenance_message = $17, updated_at = NOW()
     WHERE id = $1 RETURNING updated_at`
 	return r.db.QueryRowContext(ctx, q,
-		m.ID, m.Provider, m.FeeType, m.FeeFlat, m.FeePercent,
+		m.ID, m.Provider, m.ProviderDisplayName, m.FeeType, m.FeeFlat, m.FeePercent,
 		m.FeeMin, m.FeeMax, m.MinAmount, m.MaxAmount,
 		m.ExpiredDuration, m.LogoURL, m.DisplayOrder,
 		nullablePaymentJSON(m.PaymentInstruction), m.IsActive, m.IsMaintenance,
@@ -331,54 +331,6 @@ func (r *PaymentRepository) ListPaymentLogs(ctx context.Context, paymentID int) 
         error_code, error_message, created_at, response_at, response_time_ms
     FROM payment_logs WHERE payment_id = $1 ORDER BY created_at ASC`
 	rows := []models.PaymentLog{}
-	if err := r.db.SelectContext(ctx, &rows, q, paymentID); err != nil {
-		return nil, err
-	}
-	return rows, nil
-}
-
-// ----------------------------------------------------------------------------
-// Refunds
-// ----------------------------------------------------------------------------
-
-func (r *PaymentRepository) CreateRefund(ctx context.Context, refund *models.Refund) error {
-	q := `INSERT INTO refunds (refund_id, payment_id, amount, status, reason, provider_ref, provider_data)
-    VALUES ($1, $2, $3, $4, $5, $6, $7)
-    RETURNING id, created_at, updated_at`
-	return r.db.QueryRowContext(ctx, q,
-		refund.RefundID, refund.PaymentID, refund.Amount, refund.Status,
-		refund.Reason, refund.ProviderRef, nullablePaymentJSON(refund.ProviderData),
-	).Scan(&refund.ID, &refund.CreatedAt, &refund.UpdatedAt)
-}
-
-func (r *PaymentRepository) UpdateRefund(ctx context.Context, refund *models.Refund) error {
-	q := `UPDATE refunds SET status = $2, provider_ref = $3, provider_data = $4, processed_at = $5, updated_at = NOW()
-    WHERE id = $1 RETURNING updated_at`
-	return r.db.QueryRowContext(ctx, q,
-		refund.ID, refund.Status, refund.ProviderRef,
-		nullablePaymentJSON(refund.ProviderData), refund.ProcessedAt,
-	).Scan(&refund.UpdatedAt)
-}
-
-func (r *PaymentRepository) GetRefundByID(ctx context.Context, id int) (*models.Refund, error) {
-	q := `SELECT id, refund_id, payment_id, amount, status, reason, provider_ref, provider_data,
-        created_at, processed_at, updated_at
-    FROM refunds WHERE id = $1 LIMIT 1`
-	var rf models.Refund
-	if err := r.db.GetContext(ctx, &rf, q, id); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, sql.ErrNoRows
-		}
-		return nil, err
-	}
-	return &rf, nil
-}
-
-func (r *PaymentRepository) ListRefundsByPaymentID(ctx context.Context, paymentID int) ([]models.Refund, error) {
-	q := `SELECT id, refund_id, payment_id, amount, status, reason, provider_ref, provider_data,
-        created_at, processed_at, updated_at
-    FROM refunds WHERE payment_id = $1 ORDER BY created_at ASC`
-	rows := []models.Refund{}
 	if err := r.db.SelectContext(ctx, &rows, q, paymentID); err != nil {
 		return nil, err
 	}

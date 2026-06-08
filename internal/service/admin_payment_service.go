@@ -91,11 +91,6 @@ type AdminListPaymentsResponse struct {
 	Pagination PaginationMeta     `json:"pagination"`
 }
 
-type AdminRefundRequest struct {
-	Amount int64  `json:"amount" binding:"required"`
-	Reason string `json:"reason"`
-}
-
 type AdminUpdateMethodRequest struct {
 	Provider           *string         `json:"provider"`
 	FeeType            *string         `json:"feeType"`
@@ -184,10 +179,6 @@ func (s *AdminPaymentService) GetPaymentCallbacks(ctx context.Context, paymentID
 	return s.paymentRepo.ListPaymentCallbacksByProviderRef(ctx, p.Provider, ref)
 }
 
-func (s *AdminPaymentService) ListRefunds(ctx context.Context, paymentID int) ([]models.Refund, error) {
-	return s.paymentRepo.ListRefundsByPaymentID(ctx, paymentID)
-}
-
 func (s *AdminPaymentService) ListCallbackLogs(ctx context.Context, paymentID int) ([]models.PaymentCallbackLog, error) {
 	return s.paymentRepo.ListPaymentCallbackLogs(ctx, paymentID)
 }
@@ -238,21 +229,6 @@ func (s *AdminPaymentService) RetryCallback(ctx context.Context, paymentID, logI
 	_ = s.paymentRepo.UpdatePaymentCallbackLog(ctx, target)
 	s.callbackSvc.AttemptDelivery(ctx, target, url, secret)
 	return nil
-}
-
-// AdminRefund bypasses client-scoping and delegates to PaymentService.RefundPayment.
-func (s *AdminPaymentService) AdminRefund(ctx context.Context, paymentID int, req AdminRefundRequest) (*models.Refund, error) {
-	p, err := s.paymentRepo.GetPaymentByID(ctx, paymentID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, newPaymentError(404, "PAYMENT_NOT_FOUND", "Payment not found", nil)
-		}
-		return nil, err
-	}
-	return s.paymentSvc.RefundPayment(ctx, p.PaymentID, 0, &CreateRefundRequest{
-		Amount: req.Amount,
-		Reason: req.Reason,
-	})
 }
 
 // ---------------------------------------------------------------------------

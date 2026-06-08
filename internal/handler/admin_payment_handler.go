@@ -82,18 +82,9 @@ func (h *AdminPaymentHandler) GetPaymentCallbacks(c *gin.Context) {
 	utils.Success(c, http.StatusOK, "Provider callbacks retrieved", cbs)
 }
 
-func (h *AdminPaymentHandler) ListRefunds(c *gin.Context) {
-	id, ok := intParam(c, "id")
-	if !ok {
-		return
-	}
-	rows, err := h.adminPaymentSvc.ListRefunds(c.Request.Context(), id)
-	if err != nil {
-		h.handleError(c, err)
-		return
-	}
-	utils.Success(c, http.StatusOK, "Refunds retrieved", rows)
-}
+// ---------------------------------------------------------------------------
+// Methods
+// ---------------------------------------------------------------------------
 
 func (h *AdminPaymentHandler) ListCallbackLogs(c *gin.Context) {
 	id, ok := intParam(c, "id")
@@ -125,21 +116,7 @@ func (h *AdminPaymentHandler) RetryCallback(c *gin.Context) {
 }
 
 func (h *AdminPaymentHandler) Refund(c *gin.Context) {
-	id, ok := intParam(c, "id")
-	if !ok {
-		return
-	}
-	var req service.AdminRefundRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.Error(c, http.StatusBadRequest, "MISSING_FIELD", "Invalid request body")
-		return
-	}
-	refund, err := h.adminPaymentSvc.AdminRefund(c.Request.Context(), id, req)
-	if err != nil {
-		h.handleError(c, err)
-		return
-	}
-	utils.Success(c, http.StatusCreated, "Refund submitted", refund)
+	utils.Error(c, http.StatusGone, "REMOVED", "Refund functionality has been removed")
 }
 
 // ---------------------------------------------------------------------------

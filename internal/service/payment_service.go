@@ -52,43 +52,87 @@ func newPaymentError(httpStatus int, code, message string, err error) *PaymentSe
 // Request/response DTOs
 // ----------------------------------------------------------------------------
 
-type CreatePaymentRequest struct {
-	ReferenceID   string          `json:"referenceId"`
-	PaymentType   string          `json:"paymentType"`
-	PaymentCode   string          `json:"paymentCode"`
-	Amount        int64           `json:"amount"`
-	ExpiredAt     string          `json:"expiredAt,omitempty"`
-	CustomerName  string          `json:"customerName,omitempty"`
-	CustomerEmail string          `json:"customerEmail,omitempty"`
-	CustomerPhone string          `json:"customerPhone,omitempty"`
-	Description   string          `json:"description,omitempty"`
-	CallbackURL   string          `json:"callbackUrl,omitempty"`
-	ReturnURL     string          `json:"returnUrl,omitempty"`
-	Metadata      json.RawMessage `json:"metadata,omitempty"`
+// PaymentMethodRequest is the nested paymentMethod object in the create request.
+type PaymentMethodRequest struct {
+	Type string `json:"type"`
+	Code string `json:"code"`
 }
 
-// PaymentResponse is the shape returned on create/get endpoints.
+// CustomerRequest is the nested customer object in the create request.
+type CustomerRequest struct {
+	Name  string `json:"name,omitempty"`
+	Email string `json:"email,omitempty"`
+	Phone string `json:"phone,omitempty"`
+}
+
+// CreatePaymentRequest mirrors the Payment_API Standard_Response request shape:
+// nested paymentMethod{type,code}, nested customer, and feePaidBy forwarded
+// unchanged. Legacy flat paymentType/paymentCode have been removed.
+type CreatePaymentRequest struct {
+	ReferenceID   string                `json:"referenceId"`
+	PaymentMethod *PaymentMethodRequest `json:"paymentMethod,omitempty"`
+	Customer      *CustomerRequest      `json:"customer,omitempty"`
+	Amount        int64                 `json:"amount"`
+	FeePaidBy     string                `json:"feePaidBy,omitempty"` // "merchant" (default) or "customer"
+	ScanData      string                `json:"scanData,omitempty"`  // CPM QRIS: QR code from customer's app
+	Description   string                `json:"description,omitempty"`
+	ExpiredAt     string                `json:"expiredAt,omitempty"`
+	CallbackURL   string                `json:"callbackUrl,omitempty"`
+	ReturnURL     string                `json:"returnUrl,omitempty"`
+	Metadata      json.RawMessage       `json:"metadata,omitempty"`
+}
+
+// resolvePaymentTypeCode resolves the payment type and code from the nested
+// paymentMethod field.
+func (r *CreatePaymentRequest) resolvePaymentTypeCode() (paymentType, paymentCode string) {
+	if r.PaymentMethod != nil {
+		return r.PaymentMethod.Type, r.PaymentMethod.Code
+	}
+	return "", ""
+}
+
+// resolveCustomer returns the nested customer fields.
+func (r *CreatePaymentRequest) resolveCustomer() (name, email, phone string) {
+	if r.Customer != nil {
+		return r.Customer.Name, r.Customer.Email, r.Customer.Phone
+	}
+	return "", "", ""
+}
+
+// PaymentMethodResponse is the nested paymentMethod object in the response.
+type PaymentMethodResponse struct {
+	Type string `json:"type"`
+	Code string `json:"code"`
+}
+
+// AmountResponse is the nested amount object in the response.
+type AmountResponse struct {
+	Subtotal int64 `json:"subtotal"` // original amount before fee
+	Fee      int64 `json:"fee"`
+	Total    int64 `json:"total"` // merchant -> subtotal, customer -> subtotal + fee
+}
+
+// PaymentResponse is the Standard_Response returned on create/get endpoints.
+// It mirrors Payment_API exactly: id (UUIDv4 from Payment_API, preserved
+// unchanged), nested paymentMethod, nested amount, feePaidBy, status, and a
+// uniform paymentDetail. It carries NO provider name and NO providerRef.
 type PaymentResponse struct {
-	PaymentID          string          `json:"paymentId"`
-	ReferenceID        string          `json:"referenceId"`
-	PaymentType        string          `json:"paymentType"`
-	PaymentCode        string          `json:"paymentCode"`
-	Provider           string          `json:"provider"`
-	Amount             int64           `json:"amount"`
-	Fee                int64           `json:"fee"`
-	TotalAmount        int64           `json:"totalAmount"`
-	Status             string          `json:"status"`
-	PaymentDetail      json.RawMessage `json:"paymentDetail,omitempty"`
-	PaymentInstruction json.RawMessage `json:"paymentInstruction,omitempty"`
-	ProviderRef        string          `json:"providerRef,omitempty"`
-	CustomerName       string          `json:"customerName,omitempty"`
-	CustomerEmail      string          `json:"customerEmail,omitempty"`
-	CustomerPhone      string          `json:"customerPhone,omitempty"`
-	Description        string          `json:"description,omitempty"`
-	ExpiredAt          string          `json:"expiredAt"`
-	PaidAt             string          `json:"paidAt,omitempty"`
-	CancelledAt        string          `json:"cancelledAt,omitempty"`
-	CreatedAt          string          `json:"createdAt"`
+	ID                 string                `json:"id"`
+	ReferenceID        string                `json:"referenceId"`
+	PaymentMethod      PaymentMethodResponse `json:"paymentMethod"`
+	Amount             AmountResponse        `json:"amount"`
+	FeePaidBy          string                `json:"feePaidBy"`
+	Status             string                `json:"status"`
+	PaymentDetail      json.RawMessage       `json:"paymentDetail,omitempty"`
+	PaymentInstruction json.RawMessage       `json:"paymentInstruction,omitempty"`
+	CustomerName       string                `json:"customerName,omitempty"`
+	CustomerEmail      string                `json:"customerEmail,omitempty"`
+	CustomerPhone      string                `json:"customerPhone,omitempty"`
+	Description        string                `json:"description,omitempty"`
+	ExpiredAt          string                `json:"expiredAt"`
+	PaidAt             string                `json:"paidAt,omitempty"`
+	CancelledAt        string                `json:"cancelledAt,omitempty"`
+	CreatedAt          string                `json:"createdAt"`
 }
 
 // MethodsResponse groups active methods by payment type for the list endpoint.
@@ -203,17 +247,29 @@ func (s *PaymentService) CreatePayment(ctx context.Context, req *CreatePaymentRe
 	}
 
 	req.ReferenceID = strings.TrimSpace(req.ReferenceID)
-	req.PaymentType = strings.ToUpper(strings.TrimSpace(req.PaymentType))
-	req.PaymentCode = strings.TrimSpace(req.PaymentCode)
+
+	// Resolve payment type/code and customer from the nested request fields.
+	rawType, rawCode := req.resolvePaymentTypeCode()
+	rawType = strings.ToUpper(strings.TrimSpace(rawType))
+	rawCode = strings.TrimSpace(rawCode)
+	customerName, customerEmail, customerPhone := req.resolveCustomer()
 
 	if req.ReferenceID == "" {
 		return nil, newPaymentError(400, "MISSING_FIELD", "referenceId is required", nil)
 	}
-	if req.PaymentType == "" || req.PaymentCode == "" {
-		return nil, newPaymentError(400, "MISSING_FIELD", "paymentType and paymentCode are required", nil)
+	if rawType == "" || rawCode == "" {
+		return nil, newPaymentError(400, "MISSING_FIELD", "paymentMethod.type and paymentMethod.code are required", nil)
 	}
 	if req.Amount <= 0 {
 		return nil, newPaymentError(400, "INVALID_AMOUNT", "amount must be positive", nil)
+	}
+
+	// Resolve and validate feePaidBy (default merchant; rejects invalid values)
+	// before idempotency so a malformed value is rejected even for a brand new
+	// reference.
+	feePaidBy, err := normalizeFeePaidBy(req.FeePaidBy)
+	if err != nil {
+		return nil, err
 	}
 
 	// Idempotency: return existing record for identical referenceId.
@@ -223,7 +279,7 @@ func (s *PaymentService) CreatePayment(ctx context.Context, req *CreatePaymentRe
 		return nil, err
 	}
 
-	method, err := s.paymentRepo.GetMethodByTypeCode(ctx, models.PaymentType(req.PaymentType), req.PaymentCode)
+	method, err := s.paymentRepo.GetMethodByTypeCode(ctx, models.PaymentType(rawType), rawCode)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, newPaymentError(404, "PAYMENT_METHOD_NOT_FOUND", "Payment method not found", nil)
@@ -248,7 +304,13 @@ func (s *PaymentService) CreatePayment(ctx context.Context, req *CreatePaymentRe
 	}
 
 	fee := method.CalculateFee(req.Amount)
-	totalAmount := req.Amount + fee
+	// total depends on who bears the fee:
+	//   customer -> total = subtotal + fee
+	//   merchant -> total = subtotal
+	totalAmount := req.Amount
+	if feePaidBy == models.FeePaidByCustomer {
+		totalAmount = req.Amount + fee
+	}
 	expiredAt := resolveExpiredAt(req.ExpiredAt, method.ExpiredDuration)
 
 	metadata := models.NullableRawMessage(req.Metadata)
@@ -264,20 +326,21 @@ func (s *PaymentService) CreatePayment(ctx context.Context, req *CreatePaymentRe
 		Amount:          req.Amount,
 		Fee:             fee,
 		TotalAmount:     totalAmount,
+		FeePaidBy:       feePaidBy,
 		Status:          models.PaymentStatusPending,
 		ExpiredAt:       expiredAt,
 		Metadata:        metadata,
 	}
-	if req.CustomerName != "" {
-		v := req.CustomerName
+	if customerName != "" {
+		v := customerName
 		payment.CustomerName = &v
 	}
-	if req.CustomerEmail != "" {
-		v := req.CustomerEmail
+	if customerEmail != "" {
+		v := customerEmail
 		payment.CustomerEmail = &v
 	}
-	if req.CustomerPhone != "" {
-		v := req.CustomerPhone
+	if customerPhone != "" {
+		v := customerPhone
 		payment.CustomerPhone = &v
 	}
 	if req.Description != "" {
@@ -307,9 +370,9 @@ func (s *PaymentService) CreatePayment(ctx context.Context, req *CreatePaymentRe
 		TotalAmount:   totalAmount,
 		ExpiredAt:     expiredAt,
 		Description:   req.Description,
-		CustomerName:  req.CustomerName,
-		CustomerEmail: req.CustomerEmail,
-		CustomerPhone: req.CustomerPhone,
+		CustomerName:  customerName,
+		CustomerEmail: customerEmail,
+		CustomerPhone: customerPhone,
 		CallbackURL:   req.CallbackURL,
 		ReturnURL:     req.ReturnURL,
 	}
@@ -630,22 +693,26 @@ func (s *PaymentService) EnqueueCallback(ctx context.Context, p *models.Payment,
 
 func (s *PaymentService) buildResponse(p *models.Payment) *PaymentResponse {
 	resp := &PaymentResponse{
-		PaymentID:          p.PaymentID,
-		ReferenceID:        p.ReferenceID,
-		PaymentType:        string(p.PaymentType),
-		PaymentCode:        p.PaymentCode,
-		Provider:           string(p.Provider),
-		Amount:             p.Amount,
-		Fee:                p.Fee,
-		TotalAmount:        p.TotalAmount,
+		ID:          p.PaymentID,
+		ReferenceID: p.ReferenceID,
+		PaymentMethod: PaymentMethodResponse{
+			Type: string(p.PaymentType),
+			Code: p.PaymentCode,
+		},
+		Amount: AmountResponse{
+			Subtotal: p.Amount,
+			Fee:      p.Fee,
+			Total:    p.TotalAmount,
+		},
+		FeePaidBy:          string(p.FeePaidBy),
 		Status:             string(p.Status),
 		PaymentDetail:      json.RawMessage(p.PaymentDetail),
 		PaymentInstruction: json.RawMessage(p.PaymentInstruction),
 		ExpiredAt:          formatPaymentTime(p.ExpiredAt),
 		CreatedAt:          formatPaymentTime(p.CreatedAt),
 	}
-	if p.ProviderRef != nil {
-		resp.ProviderRef = *p.ProviderRef
+	if p.FeePaidBy == "" {
+		resp.FeePaidBy = string(models.FeePaidByMerchant)
 	}
 	if p.CustomerName != nil {
 		resp.CustomerName = *p.CustomerName
@@ -666,6 +733,24 @@ func (s *PaymentService) buildResponse(p *models.Payment) *PaymentResponse {
 		resp.CancelledAt = formatPaymentTime(*p.CancelledAt)
 	}
 	return resp
+}
+
+// normalizeFeePaidBy validates and normalizes the request feePaidBy value.
+// Empty defaults to merchant. Accepts "merchant"/"customer" case-insensitively
+// and trimmed. Any other value is rejected with INVALID_FEE_PAID_BY (HTTP 400).
+// The Gateway forwards the value unchanged to Payment_API after validation.
+func normalizeFeePaidBy(raw string) (models.FeePaidBy, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "":
+		return models.FeePaidByMerchant, nil
+	case string(models.FeePaidByMerchant):
+		return models.FeePaidByMerchant, nil
+	case string(models.FeePaidByCustomer):
+		return models.FeePaidByCustomer, nil
+	default:
+		return "", newPaymentError(400, "INVALID_FEE_PAID_BY",
+			"feePaidBy must be 'merchant' or 'customer'", nil)
+	}
 }
 
 // ----------------------------------------------------------------------------

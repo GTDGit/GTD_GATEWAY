@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -14,6 +13,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 
 	"github.com/GTDGit/gtd_gateway/internal/models"
@@ -216,57 +216,83 @@ func hmacHexSHA256(payload []byte, secret string) string {
 }
 
 func genPaymentRequestID() string {
-	b := make([]byte, 8)
-	_, _ = rand.Read(b)
-	return "pcb_" + hex.EncodeToString(b)
+	return uuid.New().String()
 }
 
 // buildPaymentCallbackPayload renders the merchant-facing webhook body.
+//
+// The envelope mirrors Payment_API's buildPaymentCallbackPayload exactly:
+// {event, data, timestamp}, where data carries the Standard_Response fields
+// (id, referenceId, nested paymentMethod{type,code}, nested amount
+// {subtotal,fee,total}, status, paymentDetail) and intentionally carries NO
+// provider name and NO providerRef. All timestamps are formatted as WIB
+// (UTC+7) without nanoseconds: 2006-01-02T15:04:05+07:00.
 func buildPaymentCallbackPayload(p *models.Payment, event string) []byte {
+	type paymentMethodData struct {
+		Type string `json:"type"`
+		Code string `json:"code"`
+	}
+	type amountData struct {
+		Subtotal int64 `json:"subtotal"`
+		Fee      int64 `json:"fee"`
+		Total    int64 `json:"total"`
+	}
 	type data struct {
-		PaymentID       string          `json:"paymentId"`
-		ReferenceID     string          `json:"referenceId"`
-		Type            string          `json:"type"`
-		Status          string          `json:"status"`
-		PaymentCode     string          `json:"paymentCode,omitempty"`
-		Provider        string          `json:"provider,omitempty"`
-		Amount          int64           `json:"amount"`
-		Fee             int64           `json:"fee"`
-		TotalAmount     int64           `json:"totalAmount"`
-		CustomerName    *string         `json:"customerName,omitempty"`
-		PaymentDetail   json.RawMessage `json:"paymentDetail,omitempty"`
-		ProviderRef     *string         `json:"providerRef,omitempty"`
-		PaidAt          *time.Time      `json:"paidAt,omitempty"`
-		CancelledAt     *time.Time      `json:"cancelledAt,omitempty"`
-		ExpiredAt       time.Time       `json:"expiredAt"`
-		CreatedAt       time.Time       `json:"createdAt"`
+		ID            string            `json:"id"`
+		ReferenceID   string            `json:"referenceId"`
+		PaymentMethod paymentMethodData `json:"paymentMethod"`
+		Amount        amountData        `json:"amount"`
+		Status        string            `json:"status"`
+		CustomerName  *string           `json:"customerName,omitempty"`
+		PaymentDetail json.RawMessage   `json:"paymentDetail,omitempty"`
+		PaidAt        string            `json:"paidAt,omitempty"`
+		CancelledAt   string            `json:"cancelledAt,omitempty"`
+		ExpiredAt     string            `json:"expiredAt"`
+		CreatedAt     string            `json:"createdAt"`
 	}
 	type envelope struct {
-		Event     string    `json:"event"`
-		Data      data      `json:"data"`
-		Timestamp time.Time `json:"timestamp"`
+		Event     string `json:"event"`
+		Data      data   `json:"data"`
+		Timestamp string `json:"timestamp"`
+	}
+
+	fmtWIB := func(t time.Time) string {
+		if t.IsZero() {
+			return ""
+		}
+		return t.UTC().Format("2006-01-02T15:04:05") + "+07:00"
+	}
+	fmtWIBPtr := func(t *time.Time) string {
+		if t == nil {
+			return ""
+		}
+		return fmtWIB(*t)
+	}
+
+	d := data{
+		ID:          p.PaymentID,
+		ReferenceID: p.ReferenceID,
+		PaymentMethod: paymentMethodData{
+			Type: string(p.PaymentType),
+			Code: p.PaymentCode,
+		},
+		Amount: amountData{
+			Subtotal: p.Amount,
+			Fee:      p.Fee,
+			Total:    p.TotalAmount,
+		},
+		Status:        string(p.Status),
+		CustomerName:  p.CustomerName,
+		PaymentDetail: json.RawMessage(p.PaymentDetail),
+		PaidAt:        fmtWIBPtr(p.PaidAt),
+		CancelledAt:   fmtWIBPtr(p.CancelledAt),
+		ExpiredAt:     fmtWIB(p.ExpiredAt),
+		CreatedAt:     fmtWIB(p.CreatedAt),
 	}
 	out := envelope{
-		Event: event,
-		Data: data{
-			PaymentID:     p.PaymentID,
-			ReferenceID:   p.ReferenceID,
-			Type:          string(p.PaymentType),
-			Status:        string(p.Status),
-			PaymentCode:   p.PaymentCode,
-			Provider:      string(p.Provider),
-			Amount:        p.Amount,
-			Fee:           p.Fee,
-			TotalAmount:   p.TotalAmount,
-			CustomerName:  p.CustomerName,
-			PaymentDetail: json.RawMessage(p.PaymentDetail),
-			ProviderRef:   p.ProviderRef,
-			PaidAt:        p.PaidAt,
-			CancelledAt:   p.CancelledAt,
-			ExpiredAt:     p.ExpiredAt,
-			CreatedAt:     p.CreatedAt,
-		},
-		Timestamp: time.Now().UTC(),
+		Event:     event,
+		Data:      d,
+		Timestamp: fmtWIB(time.Now()),
 	}
 	b, _ := json.Marshal(out)
 	return b

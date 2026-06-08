@@ -59,6 +59,17 @@ const (
 	FeeTypePercent FeeType = "percent"
 )
 
+// FeePaidBy identifies who bears the transaction fee. Mirrors the
+// payments.fee_paid_by column (API migration 000050) and the Payment_API
+// model. It drives amount.total: merchant -> total = subtotal,
+// customer -> total = subtotal + fee.
+type FeePaidBy string
+
+const (
+	FeePaidByMerchant FeePaidBy = "merchant"
+	FeePaidByCustomer FeePaidBy = "customer"
+)
+
 type RefundStatus string
 
 const (
@@ -137,6 +148,7 @@ type Payment struct {
 	Amount             int64              `db:"amount" json:"amount"`
 	Fee                int64              `db:"fee" json:"fee"`
 	TotalAmount        int64              `db:"total_amount" json:"totalAmount"`
+	FeePaidBy          FeePaidBy          `db:"fee_paid_by" json:"feePaidBy"`
 	CustomerName       *string            `db:"customer_name" json:"customerName,omitempty"`
 	CustomerEmail      *string            `db:"customer_email" json:"customerEmail,omitempty"`
 	CustomerPhone      *string            `db:"customer_phone" json:"customerPhone,omitempty"`

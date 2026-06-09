@@ -20,7 +20,6 @@ func NewClientRepository(db *sqlx.DB) *ClientRepository {
 }
 
 const clientColumns = `id, client_id, name, api_key, sandbox_key, callback_url, callback_secret,
-    payment_callback_url, payment_callback_secret,
     ip_whitelist, scopes, is_active, created_at, updated_at`
 
 func scanClient(scanner interface {
@@ -34,8 +33,6 @@ func scanClient(scanner interface {
 		&c.SandboxKey,
 		&c.CallbackURL,
 		&c.CallbackSecret,
-		&c.PaymentCallbackURL,
-		&c.PaymentCallbackSecret,
 		pq.Array(&c.IPWhitelist),
 		pq.Array(&c.Scopes),
 		&c.IsActive,
@@ -90,8 +87,8 @@ func (r *ClientRepository) GetByID(id int) (*models.Client, error) {
 func (r *ClientRepository) Create(client *models.Client) error {
 	query := `INSERT INTO clients (
         client_id, name, api_key, sandbox_key, callback_url, callback_secret,
-        payment_callback_url, payment_callback_secret, ip_whitelist, scopes, is_active
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        ip_whitelist, scopes, is_active
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
               RETURNING id, created_at, updated_at`
 
 	return r.db.QueryRowx(query,
@@ -101,8 +98,6 @@ func (r *ClientRepository) Create(client *models.Client) error {
 		client.SandboxKey,
 		client.CallbackURL,
 		client.CallbackSecret,
-		client.PaymentCallbackURL,
-		client.PaymentCallbackSecret,
 		pq.Array(client.IPWhitelist),
 		pq.Array(client.Scopes),
 		client.IsActive,
@@ -113,9 +108,8 @@ func (r *ClientRepository) Create(client *models.Client) error {
 func (r *ClientRepository) Update(client *models.Client) error {
 	query := `UPDATE clients
               SET client_id = $1, name = $2, callback_url = $3, callback_secret = $4,
-                  payment_callback_url = $5, payment_callback_secret = $6,
-                  ip_whitelist = $7, scopes = $8, is_active = $9, api_key = $10, sandbox_key = $11
-              WHERE id = $12
+                  ip_whitelist = $5, scopes = $6, is_active = $7, api_key = $8, sandbox_key = $9
+              WHERE id = $10
               RETURNING updated_at`
 
 	return r.db.QueryRowx(query,
@@ -123,8 +117,6 @@ func (r *ClientRepository) Update(client *models.Client) error {
 		client.Name,
 		client.CallbackURL,
 		client.CallbackSecret,
-		client.PaymentCallbackURL,
-		client.PaymentCallbackSecret,
 		pq.Array(client.IPWhitelist),
 		pq.Array(client.Scopes),
 		client.IsActive,

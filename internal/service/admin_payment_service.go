@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/GTDGit/gtd_gateway/internal/models"
@@ -216,18 +217,28 @@ func (s *AdminPaymentService) RetryCallback(ctx context.Context, paymentID, logI
 	if target == nil {
 		return newPaymentError(404, "CALLBACK_NOT_FOUND", "No pending callback found to retry", nil)
 	}
+	payment, err := s.paymentRepo.GetPaymentByID(ctx, target.PaymentID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return newPaymentError(404, "PAYMENT_NOT_FOUND", "Payment not found", nil)
+		}
+		return err
+	}
+	url := ""
+	if payment.CallbackURL != nil {
+		url = strings.TrimSpace(*payment.CallbackURL)
+	}
+	if url == "" {
+		return newPaymentError(400, "CALLBACK_URL_MISSING", "Payment has no callback URL", nil)
+	}
 	client, err := s.clientRepo.GetByID(target.ClientID)
 	if err != nil {
 		return err
 	}
-	url, secret := client.EffectivePaymentCallback()
-	if url == "" {
-		return newPaymentError(400, "CALLBACK_URL_MISSING", "Client has no payment callback URL configured", nil)
-	}
 	now := time.Now()
 	target.NextRetryAt = &now
 	_ = s.paymentRepo.UpdatePaymentCallbackLog(ctx, target)
-	s.callbackSvc.AttemptDelivery(ctx, target, url, secret)
+	s.callbackSvc.AttemptDelivery(ctx, target, url, client.CallbackSecret)
 	return nil
 }
 

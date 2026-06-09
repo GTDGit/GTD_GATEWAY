@@ -35,7 +35,7 @@ const paymentColumns = `id, payment_id, reference_id, client_id, payment_method_
     payment_type, payment_code, provider, amount, fee, total_amount, fee_paid_by,
     customer_name, customer_email, customer_phone, status,
     payment_detail, payment_instruction, sender_bank, sender_name, sender_account,
-    provider_ref, provider_data, callback_type, description, metadata,
+    provider_ref, provider_data, callback_type, callback_url, description, metadata,
     callback_sent, callback_sent_at, callback_attempts, expired_at,
     created_at, paid_at, cancelled_at, updated_at`
 
@@ -45,12 +45,12 @@ func (r *PaymentRepository) CreatePayment(ctx context.Context, p *models.Payment
         payment_type, payment_code, provider, amount, fee, total_amount, fee_paid_by,
         customer_name, customer_email, customer_phone, status,
         payment_detail, payment_instruction, sender_bank, sender_name, sender_account,
-        provider_ref, provider_data, callback_type, description, metadata,
+        provider_ref, provider_data, callback_type, callback_url, description, metadata,
         callback_sent, callback_sent_at, callback_attempts, expired_at
     ) VALUES (
         $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
         $13, $14, $15, $16, $17, $18, $19, $20, $21,
-        $22, $23, $24, $25, $26, $27, $28, $29, $30
+        $22, $23, $24, $25, $26, $27, $28, $29, $30, $31
     ) RETURNING id, created_at, updated_at`
 
 	return r.db.QueryRowContext(ctx, q,
@@ -60,7 +60,7 @@ func (r *PaymentRepository) CreatePayment(ctx context.Context, p *models.Payment
 		nullablePaymentJSON(p.PaymentDetail), nullablePaymentJSON(p.PaymentInstruction),
 		p.SenderBank, p.SenderName, p.SenderAccount,
 		p.ProviderRef, nullablePaymentJSON(p.ProviderData),
-		p.CallbackType, p.Description, nullablePaymentJSON(p.Metadata),
+		p.CallbackType, p.CallbackURL, p.Description, nullablePaymentJSON(p.Metadata),
 		p.CallbackSent, p.CallbackSentAt, p.CallbackAttempts, p.ExpiredAt,
 	).Scan(&p.ID, &p.CreatedAt, &p.UpdatedAt)
 }

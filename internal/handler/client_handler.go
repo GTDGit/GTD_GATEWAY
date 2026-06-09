@@ -133,7 +133,7 @@ func (h *ClientHandler) RegenerateKeys(c *gin.Context) {
 			utils.Error(c, 404, "CLIENT_NOT_FOUND", err.Error())
 			return
 		}
-		if err.Error() == "invalid key_type: must be 'live', 'sandbox', 'webhook', or 'payment_webhook'" {
+		if err.Error() == "invalid key_type: must be 'live', 'sandbox', or 'webhook'" {
 			utils.Error(c, 400, "INVALID_KEY_TYPE", err.Error())
 			return
 		}

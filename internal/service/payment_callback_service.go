@@ -11,6 +11,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -47,6 +48,13 @@ func (s *PaymentCallbackService) EnqueueEvent(ctx context.Context, payment *mode
 	if s == nil || payment == nil {
 		return
 	}
+	url := ""
+	if payment.CallbackURL != nil {
+		url = strings.TrimSpace(*payment.CallbackURL)
+	}
+	if url == "" {
+		return
+	}
 	client, err := s.clientRepo.GetByID(payment.ClientID)
 	if err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
@@ -54,10 +62,7 @@ func (s *PaymentCallbackService) EnqueueEvent(ctx context.Context, payment *mode
 		}
 		return
 	}
-	url, secret := client.EffectivePaymentCallback()
-	if url == "" {
-		return
-	}
+	secret := client.CallbackSecret
 
 	payload := buildPaymentCallbackPayload(payment, event)
 	logRow := &models.PaymentCallbackLog{
@@ -90,15 +95,22 @@ func (s *PaymentCallbackService) RetryPendingCallbacks(ctx context.Context, limi
 	}
 	for i := range rows {
 		row := &rows[i]
+		payment, err := s.paymentRepo.GetPaymentByID(ctx, row.PaymentID)
+		if err != nil {
+			continue
+		}
+		url := ""
+		if payment.CallbackURL != nil {
+			url = strings.TrimSpace(*payment.CallbackURL)
+		}
+		if url == "" {
+			continue
+		}
 		client, err := s.clientRepo.GetByID(row.ClientID)
 		if err != nil {
 			continue
 		}
-		url, secret := client.EffectivePaymentCallback()
-		if url == "" {
-			continue
-		}
-		s.AttemptDelivery(ctx, row, url, secret)
+		s.AttemptDelivery(ctx, row, url, client.CallbackSecret)
 	}
 	return nil
 }

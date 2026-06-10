@@ -12,7 +12,6 @@ type Client struct {
 	SandboxKey     string    `db:"sandbox_key" json:"sandboxKey,omitempty"`
 	CallbackURL    string    `db:"callback_url" json:"callbackUrl"`
 	CallbackSecret string    `db:"callback_secret" json:"callbackSecret,omitempty"`
-	WebhookKey     string    `db:"webhook_key" json:"webhookKey,omitempty"`
 	IPWhitelist    []string  `db:"ip_whitelist" json:"ipWhitelist"`
 	Scopes         []string  `db:"scopes" json:"scopes"`
 	IsActive       bool      `db:"is_active" json:"isActive"`

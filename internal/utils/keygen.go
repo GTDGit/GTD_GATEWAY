@@ -32,6 +32,12 @@ func GenerateWebhookSecret() (string, error) {
 	return GenerateAPIKey("gb_secret")
 }
 
+// GenerateWebhookKey generates a webhook signing key: gb_whsec_xxx.
+// Used as the HMAC-SHA256 secret for outbound payment webhooks.
+func GenerateWebhookKey() (string, error) {
+	return GenerateAPIKey("gb_whsec")
+}
+
 // GenerateRandomString generates a random alphanumeric string of specified length
 func GenerateRandomString(length int) string {
 	const charset = "abcdefghijklmnopqrstuvwxyz0123456789"

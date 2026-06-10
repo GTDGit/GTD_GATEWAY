@@ -20,7 +20,7 @@ func NewClientRepository(db *sqlx.DB) *ClientRepository {
 }
 
 const clientColumns = `id, client_id, name, api_key, sandbox_key, callback_url, callback_secret,
-    ip_whitelist, scopes, is_active, created_at, updated_at`
+    webhook_key, ip_whitelist, scopes, is_active, created_at, updated_at`
 
 func scanClient(scanner interface {
 	Scan(dest ...any) error
@@ -33,6 +33,7 @@ func scanClient(scanner interface {
 		&c.SandboxKey,
 		&c.CallbackURL,
 		&c.CallbackSecret,
+		&c.WebhookKey,
 		pq.Array(&c.IPWhitelist),
 		pq.Array(&c.Scopes),
 		&c.IsActive,
@@ -87,8 +88,8 @@ func (r *ClientRepository) GetByID(id int) (*models.Client, error) {
 func (r *ClientRepository) Create(client *models.Client) error {
 	query := `INSERT INTO clients (
         client_id, name, api_key, sandbox_key, callback_url, callback_secret,
-        ip_whitelist, scopes, is_active
-    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+        webhook_key, ip_whitelist, scopes, is_active
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
               RETURNING id, created_at, updated_at`
 
 	return r.db.QueryRowx(query,
@@ -98,6 +99,7 @@ func (r *ClientRepository) Create(client *models.Client) error {
 		client.SandboxKey,
 		client.CallbackURL,
 		client.CallbackSecret,
+		client.WebhookKey,
 		pq.Array(client.IPWhitelist),
 		pq.Array(client.Scopes),
 		client.IsActive,
@@ -108,8 +110,9 @@ func (r *ClientRepository) Create(client *models.Client) error {
 func (r *ClientRepository) Update(client *models.Client) error {
 	query := `UPDATE clients
               SET client_id = $1, name = $2, callback_url = $3, callback_secret = $4,
-                  ip_whitelist = $5, scopes = $6, is_active = $7, api_key = $8, sandbox_key = $9
-              WHERE id = $10
+                  ip_whitelist = $5, scopes = $6, is_active = $7, api_key = $8, sandbox_key = $9,
+                  webhook_key = $10
+              WHERE id = $11
               RETURNING updated_at`
 
 	return r.db.QueryRowx(query,
@@ -122,6 +125,7 @@ func (r *ClientRepository) Update(client *models.Client) error {
 		client.IsActive,
 		client.APIKey,
 		client.SandboxKey,
+		client.WebhookKey,
 		client.ID,
 	).Scan(&client.UpdatedAt)
 }

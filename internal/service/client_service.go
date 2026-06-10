@@ -74,6 +74,11 @@ func (s *ClientService) CreateClient(ctx context.Context, req *CreateClientReque
 		return nil, err
 	}
 
+	webhookKey, err := utils.GenerateWebhookKey()
+	if err != nil {
+		return nil, err
+	}
+
 	// Create client
 	// default active true if not provided
 	active := true
@@ -98,6 +103,7 @@ func (s *ClientService) CreateClient(ctx context.Context, req *CreateClientReque
 		SandboxKey:     sandboxKey,
 		CallbackURL:    req.CallbackURL,
 		CallbackSecret: webhookSecret,
+		WebhookKey:     webhookKey,
 		IPWhitelist:    req.IPWhitelist,
 		Scopes:         scopes,
 		IsActive:       active,
@@ -196,11 +202,11 @@ func (s *ClientService) RegenerateKeys(id int, keyType string) (*models.Client, 
 		}
 		client.SandboxKey = newKey
 	case "webhook":
-		newSecret, err := utils.GenerateWebhookSecret()
+		newKey, err := utils.GenerateWebhookKey()
 		if err != nil {
 			return nil, err
 		}
-		client.CallbackSecret = newSecret
+		client.WebhookKey = newKey
 	default:
 		return nil, errors.New("invalid key_type: must be 'live', 'sandbox', or 'webhook'")
 	}

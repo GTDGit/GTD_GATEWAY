@@ -559,7 +559,7 @@ func (s *PaymentService) ApplyWebhook(ctx context.Context, provider models.Payme
 	prevStatus := p.Status
 	p.Status = event.Status
 	now := time.Now()
-	if event.Status == models.PaymentStatusPaid && p.PaidAt == nil {
+	if event.Status == models.PaymentStatusSuccess && p.PaidAt == nil {
 		p.PaidAt = &now
 	}
 	if event.Status == models.PaymentStatusCancelled && p.CancelledAt == nil {
@@ -582,9 +582,6 @@ func (s *PaymentService) ApplyWebhook(ctx context.Context, provider models.Payme
 		s.notifier.NotifyPaymentStatusChanged(p)
 	}
 	eventName := "payment." + strings.ToLower(string(p.Status))
-	if p.Status == models.PaymentStatusPartialRefund {
-		eventName = "payment.partial_refund"
-	}
 	go s.EnqueueCallback(context.Background(), p, eventName)
 	return nil
 }
@@ -658,7 +655,7 @@ func (s *PaymentService) refreshStatus(ctx context.Context, p *models.Payment) (
 		prev := p.Status
 		p.Status = result.Status
 		now := time.Now()
-		if result.Status == models.PaymentStatusPaid && p.PaidAt == nil {
+		if result.Status == models.PaymentStatusSuccess && p.PaidAt == nil {
 			p.PaidAt = &now
 		}
 		if result.Status == models.PaymentStatusCancelled && p.CancelledAt == nil {
@@ -672,9 +669,6 @@ func (s *PaymentService) refreshStatus(ctx context.Context, p *models.Payment) (
 		}
 		if prev != p.Status {
 			eventName := "payment." + strings.ToLower(string(p.Status))
-			if p.Status == models.PaymentStatusPartialRefund {
-				eventName = "payment.partial_refund"
-			}
 			go s.EnqueueCallback(context.Background(), p, eventName)
 		}
 	} else if err := s.paymentRepo.UpdatePayment(ctx, p); err != nil {

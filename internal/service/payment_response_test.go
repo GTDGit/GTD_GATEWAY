@@ -36,12 +36,10 @@ func genPaymentCode(t *rapid.T) string {
 func genPaymentStatus(t *rapid.T) models.PaymentStatus {
 	return rapid.SampledFrom([]models.PaymentStatus{
 		models.PaymentStatusPending,
-		models.PaymentStatusPaid,
+		models.PaymentStatusSuccess,
 		models.PaymentStatusExpired,
 		models.PaymentStatusCancelled,
 		models.PaymentStatusFailed,
-		models.PaymentStatusRefunded,
-		models.PaymentStatusPartialRefund,
 	}).Draw(t, "status")
 }
 

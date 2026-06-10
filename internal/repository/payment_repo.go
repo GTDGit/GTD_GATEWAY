@@ -519,11 +519,11 @@ func (r *PaymentRepository) Stats(ctx context.Context, f PaymentFilter) (*Paymen
 	}
 	q := `SELECT
         COUNT(*) AS total,
-        COUNT(*) FILTER (WHERE status = 'Paid') AS total_paid,
+        COUNT(*) FILTER (WHERE status = 'Success') AS total_paid,
         COUNT(*) FILTER (WHERE status = 'Pending') AS total_pending,
         COUNT(*) FILTER (WHERE status = 'Expired') AS total_expired,
         COUNT(*) FILTER (WHERE status = 'Failed') AS total_failed,
-        COALESCE(SUM(total_amount) FILTER (WHERE status = 'Paid'), 0) AS total_volume
+        COALESCE(SUM(total_amount) FILTER (WHERE status = 'Success'), 0) AS total_volume
     FROM payments WHERE ` + strings.Join(where, " AND ")
 	var s PaymentStats
 	if err := r.db.GetContext(ctx, &s, q, args...); err != nil {

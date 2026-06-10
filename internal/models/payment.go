@@ -18,20 +18,18 @@ const (
 type PaymentStatus string
 
 const (
-	PaymentStatusPending       PaymentStatus = "Pending"
-	PaymentStatusPaid          PaymentStatus = "Paid"
-	PaymentStatusExpired       PaymentStatus = "Expired"
-	PaymentStatusCancelled     PaymentStatus = "Cancelled"
-	PaymentStatusFailed        PaymentStatus = "Failed"
-	PaymentStatusRefunded      PaymentStatus = "Refunded"
-	PaymentStatusPartialRefund PaymentStatus = "Partial_Refund"
+	PaymentStatusPending   PaymentStatus = "Pending"
+	PaymentStatusSuccess   PaymentStatus = "Success"
+	PaymentStatusExpired   PaymentStatus = "Expired"
+	PaymentStatusCancelled PaymentStatus = "Cancelled"
+	PaymentStatusFailed    PaymentStatus = "Failed"
 )
 
 // IsFinal reports whether the status is terminal (callbacks must not fire again).
 func (s PaymentStatus) IsFinal() bool {
 	switch s {
-	case PaymentStatusPaid, PaymentStatusExpired, PaymentStatusCancelled,
-		PaymentStatusFailed, PaymentStatusRefunded, PaymentStatusPartialRefund:
+	case PaymentStatusSuccess, PaymentStatusExpired, PaymentStatusCancelled,
+		PaymentStatusFailed:
 		return true
 	}
 	return false

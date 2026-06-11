@@ -271,7 +271,9 @@ func setupRoutes(router *gin.Engine, handlers *Handlers, jwtMiddleware *middlewa
 
 		// Payment method admin
 		admin.GET("/payment-methods", handlers.AdminPayment.ListMethods)
-		admin.PUT("/payment-methods/:id", handlers.AdminPayment.UpdateMethod)
+		admin.PUT("/payment-methods/:method", handlers.AdminPayment.UpdateMethod)
+		admin.GET("/payment-methods/:method/:code/providers", handlers.AdminPayment.ListProviders)
+		admin.PUT("/payment-methods/:method/:code/providers", handlers.AdminPayment.UpdateProviders)
 
 		// Disbursement transfer admin
 		admin.GET("/transfers", handlers.AdminTransfer.ListTransfers)

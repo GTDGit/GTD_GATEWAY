@@ -308,6 +308,56 @@ func (r *PaymentRepository) UpdateMethod(ctx context.Context, m *models.PaymentM
 }
 
 // ----------------------------------------------------------------------------
+// Method <-> Provider mapping (payment_method_providers). Schema owned by the
+// api service (migration 000051); the gateway reads/writes the shared table.
+// ----------------------------------------------------------------------------
+
+const methodProviderColumns = `id, payment_method_id, provider, priority, is_active, is_maintenance,
+    maintenance_message, provider_bank_code, provider_channel, created_at, updated_at`
+
+// GetMethodProvidersByTypeCode loads the provider bindings for the canonical
+// method identified by (type, code), ordered by priority ASC (lower = preferred).
+// It returns an empty slice (not an error) when the method has no bindings.
+func (r *PaymentRepository) GetMethodProvidersByTypeCode(ctx context.Context, paymentType models.PaymentType, code string) ([]models.MethodProviderBinding, error) {
+	q := `SELECT ` + prefixColumns("pmp", methodProviderColumns) + `
+    FROM payment_method_providers pmp
+    JOIN payment_methods pm ON pm.id = pmp.payment_method_id
+    WHERE pm.type = $1 AND pm.code = $2
+    ORDER BY pmp.priority ASC, pmp.id ASC`
+	rows := []models.MethodProviderBinding{}
+	if err := r.db.SelectContext(ctx, &rows, q, paymentType, code); err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// UpdateMethodProviderBinding persists the admin-editable fields of a binding:
+// priority, is_active, is_maintenance, and maintenance_message.
+func (r *PaymentRepository) UpdateMethodProviderBinding(ctx context.Context, b *models.MethodProviderBinding) error {
+	q := `UPDATE payment_method_providers SET
+        priority = $2,
+        is_active = $3,
+        is_maintenance = $4,
+        maintenance_message = $5,
+        updated_at = NOW()
+    WHERE id = $1
+    RETURNING updated_at`
+	return r.db.QueryRowContext(ctx, q,
+		b.ID, b.Priority, b.IsActive, b.IsMaintenance, b.MaintenanceMessage,
+	).Scan(&b.UpdatedAt)
+}
+
+// prefixColumns rewrites a comma-separated column list to alias.column form so
+// a shared column constant can be reused inside a JOIN query.
+func prefixColumns(alias, columns string) string {
+	parts := strings.Split(columns, ",")
+	for i, p := range parts {
+		parts[i] = alias + "." + strings.TrimSpace(p)
+	}
+	return strings.Join(parts, ", ")
+}
+
+// ----------------------------------------------------------------------------
 // Logs
 // ----------------------------------------------------------------------------
 

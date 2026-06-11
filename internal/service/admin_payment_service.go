@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"sort"
 	"strings"
 	"time"
 
@@ -108,6 +109,34 @@ type AdminUpdateMethodRequest struct {
 	IsActive           *bool           `json:"isActive"`
 	IsMaintenance      *bool           `json:"isMaintenance"`
 	MaintenanceMessage *string         `json:"maintenanceMessage"`
+}
+
+// AdminMethodView is a canonical payment method plus its ordered provider
+// bindings (the Method_Provider_Mapping rows, priority ASC).
+type AdminMethodView struct {
+	models.PaymentMethod
+	Providers []models.MethodProviderBinding `json:"providers"`
+}
+
+// AdminListMethodsResponse wraps the method list, each with its provider bindings.
+type AdminListMethodsResponse struct {
+	Methods []AdminMethodView `json:"methods"`
+}
+
+// AdminBindingUpdate is one ordered binding update in the providers PUT body.
+// The provider identifies which binding row to update for the method.
+type AdminBindingUpdate struct {
+	Provider           string  `json:"provider"`
+	Priority           int     `json:"priority"`
+	IsActive           bool    `json:"isActive"`
+	IsMaintenance      bool    `json:"isMaintenance"`
+	MaintenanceMessage *string `json:"maintenanceMessage,omitempty"`
+}
+
+// AdminUpdateBindingsRequest is the body for PUT .../providers — the ordered
+// set of bindings to apply for a method.
+type AdminUpdateBindingsRequest struct {
+	Providers []AdminBindingUpdate `json:"providers"`
 }
 
 // ---------------------------------------------------------------------------
@@ -246,8 +275,21 @@ func (s *AdminPaymentService) RetryCallback(ctx context.Context, paymentID, logI
 // Methods
 // ---------------------------------------------------------------------------
 
-func (s *AdminPaymentService) ListMethods(ctx context.Context) ([]models.PaymentMethod, error) {
-	return s.paymentRepo.ListAllMethods(ctx)
+func (s *AdminPaymentService) ListMethods(ctx context.Context) (*AdminListMethodsResponse, error) {
+	methods, err := s.paymentRepo.ListAllMethods(ctx)
+	if err != nil {
+		return nil, err
+	}
+	views := make([]AdminMethodView, 0, len(methods))
+	for i := range methods {
+		m := methods[i]
+		bindings, err := s.paymentRepo.GetMethodProvidersByTypeCode(ctx, m.Type, m.Code)
+		if err != nil {
+			return nil, err
+		}
+		views = append(views, AdminMethodView{PaymentMethod: m, Providers: bindings})
+	}
+	return &AdminListMethodsResponse{Methods: views}, nil
 }
 
 func (s *AdminPaymentService) UpdateMethod(ctx context.Context, id int, req AdminUpdateMethodRequest) (*models.PaymentMethod, error) {
@@ -312,6 +354,103 @@ func (s *AdminPaymentService) UpdateMethod(ctx context.Context, id int, req Admi
 		return nil, err
 	}
 	return m, nil
+}
+
+// ListProviders returns the provider bindings for the method identified by
+// (type, code), ordered by priority ASC.
+func (s *AdminPaymentService) ListProviders(ctx context.Context, paymentType, code string) ([]models.MethodProviderBinding, error) {
+	t, c, err := normalizeMethodKey(paymentType, code)
+	if err != nil {
+		return nil, err
+	}
+	bindings, err := s.paymentRepo.GetMethodProvidersByTypeCode(ctx, t, c)
+	if err != nil {
+		return nil, err
+	}
+	if len(bindings) == 0 {
+		// Distinguish a missing method from a method with no bindings.
+		if _, mErr := s.paymentRepo.GetMethodByTypeCode(ctx, t, c); mErr != nil {
+			if errors.Is(mErr, sql.ErrNoRows) {
+				return nil, newPaymentError(404, "PAYMENT_METHOD_NOT_FOUND", "Payment method not found", nil)
+			}
+			return nil, mErr
+		}
+	}
+	return bindings, nil
+}
+
+// UpdateProviders applies the ordered binding updates (priority, is_active,
+// is_maintenance, maintenance_message) for the method identified by
+// (type, code) and returns the refreshed, priority-ordered bindings.
+func (s *AdminPaymentService) UpdateProviders(ctx context.Context, paymentType, code string, req AdminUpdateBindingsRequest) ([]models.MethodProviderBinding, error) {
+	t, c, err := normalizeMethodKey(paymentType, code)
+	if err != nil {
+		return nil, err
+	}
+	existing, err := s.paymentRepo.GetMethodProvidersByTypeCode(ctx, t, c)
+	if err != nil {
+		return nil, err
+	}
+	if len(existing) == 0 {
+		if _, mErr := s.paymentRepo.GetMethodByTypeCode(ctx, t, c); mErr != nil {
+			if errors.Is(mErr, sql.ErrNoRows) {
+				return nil, newPaymentError(404, "PAYMENT_METHOD_NOT_FOUND", "Payment method not found", nil)
+			}
+			return nil, mErr
+		}
+	}
+
+	// Index existing bindings by provider for lookup.
+	byProvider := make(map[models.PaymentProvider]*models.MethodProviderBinding, len(existing))
+	for i := range existing {
+		byProvider[existing[i].Provider] = &existing[i]
+	}
+
+	for _, u := range req.Providers {
+		prov := models.PaymentProvider(strings.TrimSpace(u.Provider))
+		binding, ok := byProvider[prov]
+		if !ok {
+			return nil, newPaymentError(400, "INVALID_PROVIDER_BINDING",
+				"provider '"+u.Provider+"' is not bound to this payment method", nil)
+		}
+		binding.Priority = u.Priority
+		binding.IsActive = u.IsActive
+		binding.IsMaintenance = u.IsMaintenance
+		if u.MaintenanceMessage != nil {
+			v := *u.MaintenanceMessage
+			binding.MaintenanceMessage = &v
+		} else {
+			binding.MaintenanceMessage = nil
+		}
+		if err := s.paymentRepo.UpdateMethodProviderBinding(ctx, binding); err != nil {
+			return nil, err
+		}
+	}
+
+	// Return the updated bindings ordered by priority ASC.
+	sort.SliceStable(existing, func(i, j int) bool {
+		if existing[i].Priority != existing[j].Priority {
+			return existing[i].Priority < existing[j].Priority
+		}
+		return existing[i].ID < existing[j].ID
+	})
+	return existing, nil
+}
+
+// normalizeMethodKey upper-cases the type, trims the code, and validates the
+// payment type against the known set.
+func normalizeMethodKey(paymentType, code string) (models.PaymentType, string, error) {
+	t := models.PaymentType(strings.ToUpper(strings.TrimSpace(paymentType)))
+	c := strings.TrimSpace(code)
+	switch t {
+	case models.PaymentTypeVA, models.PaymentTypeEwallet, models.PaymentTypeQRIS, models.PaymentTypeRetail:
+	default:
+		return "", "", newPaymentError(400, "INVALID_PARAM", "Unknown payment method type: "+paymentType, nil)
+	}
+	if c == "" {
+		return "", "", newPaymentError(400, "MISSING_FIELD", "payment method code is required", nil)
+	}
+	return t, c, nil
 }
 
 // ---------------------------------------------------------------------------

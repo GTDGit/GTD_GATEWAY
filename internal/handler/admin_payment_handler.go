@@ -133,7 +133,7 @@ func (h *AdminPaymentHandler) ListMethods(c *gin.Context) {
 }
 
 func (h *AdminPaymentHandler) UpdateMethod(c *gin.Context) {
-	id, ok := intParam(c, "id")
+	id, ok := intParam(c, "method")
 	if !ok {
 		return
 	}
@@ -148,6 +148,33 @@ func (h *AdminPaymentHandler) UpdateMethod(c *gin.Context) {
 		return
 	}
 	utils.Success(c, http.StatusOK, "Payment method updated", m)
+}
+
+// ListProviders returns the ordered provider bindings for the method
+// identified by (type, code).
+func (h *AdminPaymentHandler) ListProviders(c *gin.Context) {
+	bindings, err := h.adminPaymentSvc.ListProviders(c.Request.Context(), c.Param("method"), c.Param("code"))
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.Success(c, http.StatusOK, "Providers retrieved", bindings)
+}
+
+// UpdateProviders applies the ordered binding updates for the method
+// identified by (type, code) and returns the refreshed bindings.
+func (h *AdminPaymentHandler) UpdateProviders(c *gin.Context) {
+	var req service.AdminUpdateBindingsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.Error(c, http.StatusBadRequest, "MISSING_FIELD", "Invalid request body")
+		return
+	}
+	bindings, err := h.adminPaymentSvc.UpdateProviders(c.Request.Context(), c.Param("method"), c.Param("code"), req)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.Success(c, http.StatusOK, "Providers updated", bindings)
 }
 
 // ---------------------------------------------------------------------------

@@ -31,7 +31,7 @@ func nullablePaymentJSON(v models.NullableRawMessage) any {
 // Payment CRUD
 // ----------------------------------------------------------------------------
 
-const paymentColumns = `id, payment_id, reference_id, client_id, payment_method_id, is_sandbox,
+const paymentColumns = `id, payment_id, reference_id, partner_ref, client_id, payment_method_id, is_sandbox,
     payment_type, payment_code, provider, amount, fee, total_amount, fee_paid_by,
     customer_name, customer_email, customer_phone, status,
     payment_detail, payment_instruction, sender_bank, sender_name, sender_account,

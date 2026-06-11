@@ -137,6 +137,7 @@ type Payment struct {
 	ID                 int                `db:"id" json:"id"`
 	PaymentID          string             `db:"payment_id" json:"paymentId"`
 	ReferenceID        string             `db:"reference_id" json:"referenceId"`
+	PartnerRef         string             `db:"partner_ref" json:"partnerRef"`
 	ClientID           int                `db:"client_id" json:"clientId"`
 	PaymentMethodID    int                `db:"payment_method_id" json:"paymentMethodId"`
 	IsSandbox          bool               `db:"is_sandbox" json:"isSandbox"`

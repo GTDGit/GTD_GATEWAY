@@ -69,6 +69,7 @@ func main() {
 	ppobProviderRepo := repository.NewPPOBProviderRepository(db)
 	paymentRepo := repository.NewPaymentRepository(db)
 	productMasterRepo := repository.NewProductMasterRepository(db)
+	reconRepo := repository.NewReconciliationRepository(db)
 
 	// 5. Initialize services (no provider clients — admin read/view only)
 	adminAuthSvc := service.NewAdminAuthService(adminRepo)
@@ -99,6 +100,7 @@ func main() {
 	paymentSvc := service.NewPaymentService(paymentRepo, clientRepo, nil, paymentCallbackSvc)
 	paymentSvc.SetNotifier(sseNotifier)
 	adminPaymentSvc := service.NewAdminPaymentService(paymentRepo, clientRepo, paymentSvc, paymentCallbackSvc)
+	adminReconciliationSvc := service.NewAdminReconciliationService(reconRepo, paymentRepo, paymentSvc)
 
 	// adminTransferSvc only needs transferRepo for listing/viewing.
 	adminTransferSvc := service.NewAdminTransferService(transferRepo)
@@ -115,6 +117,7 @@ func main() {
 		PPOBProvider:      handler.NewPPOBProviderHandler(ppobProviderRepo),
 		SSE:               handler.NewSSEHandler(sseHub),
 		AdminPayment:      handler.NewAdminPaymentHandler(adminPaymentSvc),
+		AdminReconciliation: handler.NewAdminReconciliationHandler(adminReconciliationSvc),
 		AdminTransfer:     handler.NewAdminTransferHandler(adminTransferSvc),
 	}
 
@@ -184,6 +187,7 @@ type Handlers struct {
 	PPOBProvider      *handler.PPOBProviderHandler
 	SSE               *handler.SSEHandler
 	AdminPayment      *handler.AdminPaymentHandler
+	AdminReconciliation *handler.AdminReconciliationHandler
 	AdminTransfer     *handler.AdminTransferHandler
 }
 
@@ -268,6 +272,11 @@ func setupRoutes(router *gin.Engine, handlers *Handlers, jwtMiddleware *middlewa
 		admin.GET("/payments/:id/callback-logs", handlers.AdminPayment.ListCallbackLogs)
 		admin.POST("/payments/:id/retry-callback", handlers.AdminPayment.RetryCallback)
 		admin.POST("/payments/:id/refund", handlers.AdminPayment.Refund)
+
+		// Reconciliation admin (verify-by-inquiry mismatches)
+		admin.GET("/reconciliations", handlers.AdminReconciliation.ListReconciliations)
+		admin.GET("/reconciliations/:id", handlers.AdminReconciliation.GetReconciliation)
+		admin.POST("/reconciliations/:id/resolve", handlers.AdminReconciliation.ResolveReconciliation)
 
 		// Payment method admin
 		admin.GET("/payment-methods", handlers.AdminPayment.ListMethods)

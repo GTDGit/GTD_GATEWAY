@@ -65,7 +65,7 @@ func main() {
 	cbRepo := repository.NewCallbackRepository(db)
 	adminRepo := repository.NewAdminUserRepository(db)
 	bankCodeRepo := repository.NewBankCodeRepository(db)
-	transferRepo := repository.NewTransferRepository(db)
+	payoutRepo := repository.NewPayoutRepository(db)
 	ppobProviderRepo := repository.NewPPOBProviderRepository(db)
 	paymentRepo := repository.NewPaymentRepository(db)
 	productMasterRepo := repository.NewProductMasterRepository(db)
@@ -102,8 +102,8 @@ func main() {
 	adminPaymentSvc := service.NewAdminPaymentService(paymentRepo, clientRepo, paymentSvc, paymentCallbackSvc)
 	adminReconciliationSvc := service.NewAdminReconciliationService(reconRepo, paymentRepo, paymentSvc)
 
-	// adminTransferSvc only needs transferRepo for listing/viewing.
-	adminTransferSvc := service.NewAdminTransferService(transferRepo)
+	// adminPayoutSvc only needs payoutRepo for listing/viewing + route management.
+	adminPayoutSvc := service.NewAdminPayoutService(payoutRepo)
 
 	// 6. Initialize handlers (admin + health only)
 	handlers := &Handlers{
@@ -118,7 +118,7 @@ func main() {
 		SSE:               handler.NewSSEHandler(sseHub),
 		AdminPayment:      handler.NewAdminPaymentHandler(adminPaymentSvc),
 		AdminReconciliation: handler.NewAdminReconciliationHandler(adminReconciliationSvc),
-		AdminTransfer:     handler.NewAdminTransferHandler(adminTransferSvc),
+		AdminPayout:       handler.NewAdminPayoutHandler(adminPayoutSvc),
 	}
 
 	// 7. Initialize middleware (admin uses JWT only)
@@ -188,7 +188,7 @@ type Handlers struct {
 	SSE               *handler.SSEHandler
 	AdminPayment      *handler.AdminPaymentHandler
 	AdminReconciliation *handler.AdminReconciliationHandler
-	AdminTransfer     *handler.AdminTransferHandler
+	AdminPayout       *handler.AdminPayoutHandler
 }
 
 // setupRoutes registers the admin route group and the health endpoint only.
@@ -284,11 +284,13 @@ func setupRoutes(router *gin.Engine, handlers *Handlers, jwtMiddleware *middlewa
 		admin.GET("/payment-methods/:method/:code/providers", handlers.AdminPayment.ListProviders)
 		admin.PUT("/payment-methods/:method/:code/providers", handlers.AdminPayment.UpdateProviders)
 
-		// Disbursement transfer admin
-		admin.GET("/transfers", handlers.AdminTransfer.ListTransfers)
-		admin.GET("/transfers/stats", handlers.AdminTransfer.Stats)
-		admin.GET("/transfers/:id", handlers.AdminTransfer.GetTransfer)
-		admin.GET("/transfers/:id/callbacks", handlers.AdminTransfer.ListCallbacks)
+		// Disbursement payout admin
+		admin.GET("/payouts", handlers.AdminPayout.ListPayouts)
+		admin.GET("/payouts/stats", handlers.AdminPayout.Stats)
+		admin.GET("/payouts/routes", handlers.AdminPayout.ListRoutes)
+		admin.PUT("/payouts/routes/:id", handlers.AdminPayout.UpdateRoute)
+		admin.GET("/payouts/:id", handlers.AdminPayout.GetPayout)
+		admin.GET("/payouts/:id/callbacks", handlers.AdminPayout.ListCallbacks)
 
 		// Bank code admin (controls disbursement bank availability + VA support)
 		admin.GET("/bank-codes", handlers.BankCode.AdminListBankCodes)

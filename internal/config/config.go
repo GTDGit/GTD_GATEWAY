@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -25,8 +26,26 @@ type Config struct {
 	APIInternalURL   string
 	InternalAPIToken string
 
-	DB    DatabaseConfig
-	Redis RedisConfig
+	DB      DatabaseConfig
+	Redis   RedisConfig
+	Storage StorageConfig
+
+	// FilesBaseURL is the public base of the QRIS document portal
+	// (e.g. https://files.qris.gtd.co.id). The gateway uses it to build the
+	// shareable bundle link returned after an upload. No trailing slash.
+	FilesBaseURL string
+}
+
+// StorageConfig contains S3 (Jakarta / ap-southeast-3) parameters for the QRIS
+// document portal. Files are ALWAYS private — the bucket must block all public
+// access; objects are only ever streamed through a token-validating handler.
+type StorageConfig struct {
+	Region    string // ap-southeast-3 (Jakarta) for data residency
+	Bucket    string
+	Endpoint  string // optional custom endpoint (e.g. MinIO for local dev); empty = AWS default
+	AccessKey string
+	SecretKey string
+	KeyPrefix string // optional object key prefix, e.g. "qris-docs"
 }
 
 // DatabaseConfig contains PostgreSQL connection parameters.
@@ -64,6 +83,7 @@ func Load() (*Config, error) {
 	cfg.JWTSecret = getEnv("JWT_SECRET", "")
 	cfg.APIInternalURL = getEnv("API_INTERNAL_URL", "")
 	cfg.InternalAPIToken = getEnv("INTERNAL_API_TOKEN", "")
+	cfg.FilesBaseURL = strings.TrimRight(getEnv("FILES_BASE_URL", ""), "/")
 
 	// Database
 	cfg.DB = DatabaseConfig{
@@ -82,6 +102,16 @@ func Load() (*Config, error) {
 		Port:     getEnv("REDIS_PORT", "6379"),
 		Password: getEnv("REDIS_PASSWORD", ""),
 		DB:       getEnvInt("REDIS_DB", 0),
+	}
+
+	// Storage (S3 Jakarta) for the QRIS document portal.
+	cfg.Storage = StorageConfig{
+		Region:    getEnv("FILES_S3_REGION", "ap-southeast-3"),
+		Bucket:    getEnv("FILES_S3_BUCKET", ""),
+		Endpoint:  getEnv("FILES_S3_ENDPOINT", ""),
+		AccessKey: getEnv("FILES_S3_ACCESS_KEY", ""),
+		SecretKey: getEnv("FILES_S3_SECRET_KEY", ""),
+		KeyPrefix: getEnv("FILES_S3_KEY_PREFIX", "qris-docs"),
 	}
 
 	// Basic validation for DB parameters — keeps messages concise and helpful.

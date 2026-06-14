@@ -21,6 +21,7 @@ import (
 	"github.com/GTDGit/gtd_gateway/internal/repository"
 	"github.com/GTDGit/gtd_gateway/internal/service"
 	"github.com/GTDGit/gtd_gateway/internal/sse"
+	"github.com/GTDGit/gtd_gateway/internal/storage"
 	"github.com/GTDGit/gtd_gateway/internal/utils"
 )
 
@@ -57,6 +58,22 @@ func main() {
 	defer redisClient.Close()
 	log.Info().Msg("redis connected successfully")
 
+	// 3c. Initialize S3 storage for the QRIS document portal. Nil-safe: when
+	// S3 is not configured the gateway still boots; upload actions return a
+	// clear error at runtime instead of crashing on start.
+	var docStore storage.Storage
+	if cfg.Storage.Bucket != "" {
+		s3store, serr := storage.NewS3Storage(context.Background(), cfg.Storage)
+		if serr != nil {
+			log.Warn().Err(serr).Msg("qris doc storage init failed; uploads disabled")
+		} else {
+			docStore = s3store
+			log.Info().Str("bucket", cfg.Storage.Bucket).Str("region", cfg.Storage.Region).Msg("qris doc storage ready")
+		}
+	} else {
+		log.Warn().Msg("S3_BUCKET not set; qris doc uploads disabled")
+	}
+
 	// 4. Initialize repositories
 	clientRepo := repository.NewClientRepository(db)
 	productRepo := repository.NewProductRepository(db)
@@ -72,6 +89,7 @@ func main() {
 	reconRepo := repository.NewReconciliationRepository(db)
 	qrisMerchantRepo := repository.NewQRISMerchantRepository(db)
 	qrisPaymentRepo := repository.NewQRISPaymentRepository(db)
+	qrisDocRepo := repository.NewQRISDocRepository(db)
 
 	// 5. Initialize services (no provider clients — admin read/view only)
 	adminAuthSvc := service.NewAdminAuthService(adminRepo)
@@ -112,6 +130,9 @@ func main() {
 	pakailinkProxy := service.NewPakailinkProxy(cfg.APIInternalURL, cfg.InternalAPIToken)
 	qrisSvc := service.NewQRISService(qrisMerchantRepo, qrisPaymentRepo, pakailinkProxy)
 
+	// QRIS document portal: upload to private S3 + token-gated shareable links.
+	qrisDocSvc := service.NewQRISDocService(qrisDocRepo, docStore, cfg.Storage.KeyPrefix, cfg.FilesBaseURL)
+
 	// 6. Initialize handlers (admin + health only)
 	handlers := &Handlers{
 		Health:            handler.NewHealthHandler(nil),
@@ -127,6 +148,7 @@ func main() {
 		AdminReconciliation: handler.NewAdminReconciliationHandler(adminReconciliationSvc),
 		AdminPayout:       handler.NewAdminPayoutHandler(adminPayoutSvc),
 		QRIS:              handler.NewQRISHandler(qrisSvc),
+		QRISDoc:           handler.NewQRISDocHandler(qrisDocSvc),
 	}
 
 	// 7. Initialize middleware (admin uses JWT only)
@@ -198,6 +220,7 @@ type Handlers struct {
 	AdminReconciliation *handler.AdminReconciliationHandler
 	AdminPayout       *handler.AdminPayoutHandler
 	QRIS              *handler.QRISHandler
+	QRISDoc           *handler.QRISDocHandler
 }
 
 // setupRoutes registers the admin route group and the health endpoint only.
@@ -312,6 +335,13 @@ func setupRoutes(router *gin.Engine, handlers *Handlers, jwtMiddleware *middlewa
 		admin.PUT("/qris/merchants/:id", handlers.QRIS.UpdateMerchant)
 		admin.POST("/qris/merchants/:id/pakailink-generate", handlers.QRIS.RequestPakailinkQR)
 		admin.GET("/qris/payments", handlers.QRIS.ListPayments)
+
+		// QRIS document portal: upload onboarding docs → private S3 → shareable
+		// token-gated link delivered to Nobu. Files are never public.
+		admin.POST("/qris/documents", handlers.QRISDoc.CreateBundle)
+		admin.GET("/qris/documents", handlers.QRISDoc.ListBundles)
+		admin.GET("/qris/documents/:token", handlers.QRISDoc.GetBundle)
+		admin.POST("/qris/documents/:token/revoke", handlers.QRISDoc.RevokeBundle)
 	}
 }
 

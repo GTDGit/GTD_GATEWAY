@@ -19,6 +19,12 @@ type Config struct {
 	Env       string
 	JWTSecret string
 
+	// Service-to-service: the gateway proxies Pakailink QRIS register/generate
+	// to the api service (which owns the provider client). These are empty when
+	// the proxy is not configured, in which case those admin actions return 503.
+	APIInternalURL   string
+	InternalAPIToken string
+
 	DB    DatabaseConfig
 	Redis RedisConfig
 }
@@ -56,6 +62,8 @@ func Load() (*Config, error) {
 	cfg.Port = getEnv("PORT", "8080")
 	cfg.Env = getEnv("ENV", "development")
 	cfg.JWTSecret = getEnv("JWT_SECRET", "")
+	cfg.APIInternalURL = getEnv("API_INTERNAL_URL", "")
+	cfg.InternalAPIToken = getEnv("INTERNAL_API_TOKEN", "")
 
 	// Database
 	cfg.DB = DatabaseConfig{

@@ -70,6 +70,8 @@ func main() {
 	paymentRepo := repository.NewPaymentRepository(db)
 	productMasterRepo := repository.NewProductMasterRepository(db)
 	reconRepo := repository.NewReconciliationRepository(db)
+	qrisMerchantRepo := repository.NewQRISMerchantRepository(db)
+	qrisPaymentRepo := repository.NewQRISPaymentRepository(db)
 
 	// 5. Initialize services (no provider clients — admin read/view only)
 	adminAuthSvc := service.NewAdminAuthService(adminRepo)
@@ -105,6 +107,11 @@ func main() {
 	// adminPayoutSvc only needs payoutRepo for listing/viewing + route management.
 	adminPayoutSvc := service.NewAdminPayoutService(payoutRepo)
 
+	// QRIS: gateway owns merchant CRUD + payment views. Pakailink generate is
+	// delegated to the api service over the internal-token-guarded proxy.
+	pakailinkProxy := service.NewPakailinkProxy(cfg.APIInternalURL, cfg.InternalAPIToken)
+	qrisSvc := service.NewQRISService(qrisMerchantRepo, qrisPaymentRepo, pakailinkProxy)
+
 	// 6. Initialize handlers (admin + health only)
 	handlers := &Handlers{
 		Health:            handler.NewHealthHandler(nil),
@@ -119,6 +126,7 @@ func main() {
 		AdminPayment:      handler.NewAdminPaymentHandler(adminPaymentSvc),
 		AdminReconciliation: handler.NewAdminReconciliationHandler(adminReconciliationSvc),
 		AdminPayout:       handler.NewAdminPayoutHandler(adminPayoutSvc),
+		QRIS:              handler.NewQRISHandler(qrisSvc),
 	}
 
 	// 7. Initialize middleware (admin uses JWT only)
@@ -189,6 +197,7 @@ type Handlers struct {
 	AdminPayment      *handler.AdminPaymentHandler
 	AdminReconciliation *handler.AdminReconciliationHandler
 	AdminPayout       *handler.AdminPayoutHandler
+	QRIS              *handler.QRISHandler
 }
 
 // setupRoutes registers the admin route group and the health endpoint only.
@@ -295,6 +304,14 @@ func setupRoutes(router *gin.Engine, handlers *Handlers, jwtMiddleware *middlewa
 		// Bank code admin (controls disbursement bank availability + VA support)
 		admin.GET("/bank-codes", handlers.BankCode.AdminListBankCodes)
 		admin.PUT("/bank-codes/:id", handlers.BankCode.AdminUpdateBankCode)
+
+		// Static QRIS merchant management + payment views
+		admin.GET("/qris/merchants", handlers.QRIS.ListMerchants)
+		admin.POST("/qris/merchants", handlers.QRIS.CreateMerchant)
+		admin.GET("/qris/merchants/:id", handlers.QRIS.GetMerchant)
+		admin.PUT("/qris/merchants/:id", handlers.QRIS.UpdateMerchant)
+		admin.POST("/qris/merchants/:id/pakailink-generate", handlers.QRIS.RequestPakailinkQR)
+		admin.GET("/qris/payments", handlers.QRIS.ListPayments)
 	}
 }
 

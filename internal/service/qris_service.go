@@ -112,8 +112,11 @@ func (s *QRISService) GetMerchant(ctx context.Context, id int) (*models.QRISMerc
 
 func (s *QRISService) CreateMerchant(ctx context.Context, req QRISMerchantUpsertRequest) (*models.QRISMerchant, error) {
 	provider := strings.TrimSpace(req.Provider)
-	if provider != string(models.QRISProviderPakailink) && provider != string(models.QRISProviderNobu) {
-		return nil, newPaymentError(http.StatusBadRequest, "INVALID_PROVIDER", "provider must be pakailink or nobu", nil)
+	if provider == "" {
+		provider = string(models.QRISProviderNobu)
+	}
+	if provider != string(models.QRISProviderNobu) {
+		return nil, newPaymentError(http.StatusBadRequest, "INVALID_PROVIDER", "provider must be nobu", nil)
 	}
 	storeID := strings.TrimSpace(req.StoreID)
 	if storeID == "" {

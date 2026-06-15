@@ -23,7 +23,7 @@ import (
 
 const (
 	paymentCallbackMaxAttempts = 5
-	paymentCallbackSignatureHeader = "X-GTD-Payment-Signature"
+	paymentCallbackSignatureHeader = "X-GTD-Signature"
 )
 
 // PaymentCallbackService delivers HMAC-signed webhooks to the merchant's

@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -15,20 +14,19 @@ import (
 )
 
 // QRISService implements admin CRUD over static-QRIS merchants and read-only
-// listing of successful QRIS payments. Pakailink register/generate is delegated
-// to the api service via PakailinkProxy (the gateway holds no provider client).
+// listing of successful QRIS payments. Nobu onboarding (registration intake,
+// Excel batches, activation + QR generation) lives in the api service and is
+// reached by the admin handler through APIAdminProxy.
 type QRISService struct {
 	merchantRepo *repository.QRISMerchantRepository
 	paymentRepo  *repository.QRISPaymentRepository
-	proxy        *PakailinkProxy
 }
 
 func NewQRISService(
 	merchantRepo *repository.QRISMerchantRepository,
 	paymentRepo *repository.QRISPaymentRepository,
-	proxy *PakailinkProxy,
 ) *QRISService {
-	return &QRISService{merchantRepo: merchantRepo, paymentRepo: paymentRepo, proxy: proxy}
+	return &QRISService{merchantRepo: merchantRepo, paymentRepo: paymentRepo}
 }
 
 // ---------------------------------------------------------------------------
@@ -170,47 +168,6 @@ func (s *QRISService) UpdateMerchant(ctx context.Context, id int, req QRISMercha
 			return nil, newPaymentError(http.StatusConflict, "DUPLICATE", "a merchant with this provider + storeId already exists", err)
 		}
 		return nil, newPaymentError(http.StatusInternalServerError, "INTERNAL_ERROR", "failed to update merchant", err)
-	}
-	return m, nil
-}
-
-// RequestPakailinkQR drives the api-side register+generate flow and persists the
-// returned QR string + parsed fields onto the merchant.
-func (s *QRISService) RequestPakailinkQR(ctx context.Context, id int) (*models.QRISMerchant, error) {
-	m, err := s.GetMerchant(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	if m.Provider != models.QRISProviderPakailink {
-		return nil, newPaymentError(http.StatusBadRequest, "INVALID_PROVIDER", "QR request is only available for Pakailink merchants", nil)
-	}
-	if s.proxy == nil || !s.proxy.Enabled() {
-		return nil, newPaymentError(http.StatusServiceUnavailable, "PROXY_UNAVAILABLE", "api internal proxy is not configured", nil)
-	}
-
-	genResp, err := s.proxy.Generate(ctx, PakailinkGenerateRequest{
-		StoreID:      m.StoreID,
-		TerminalID:   strFromPtr(m.TerminalID),
-		MerchantName: strFromPtr(m.MerchantName),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	qr := strings.TrimSpace(genResp.QRContent)
-	if qr == "" {
-		return nil, newPaymentError(http.StatusBadGateway, "PROVIDER_ERROR", "Pakailink returned an empty QR string", nil)
-	}
-	m.QRISString = &qr
-	if raw, mErr := json.Marshal(genResp); mErr == nil {
-		m.RawProviderResponse = models.NullableRawMessage(raw)
-	}
-	if info, perr := utils.ParseQRIS(qr); perr == nil {
-		applyQRISInfo(m, info)
-	}
-
-	if err := s.merchantRepo.Update(ctx, m); err != nil {
-		return nil, newPaymentError(http.StatusInternalServerError, "INTERNAL_ERROR", "failed to persist generated QR", err)
 	}
 	return m, nil
 }

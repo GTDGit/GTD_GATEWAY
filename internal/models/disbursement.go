@@ -138,3 +138,27 @@ type PayoutCallback struct {
 	ProcessError     *string              `db:"process_error"`
 	CreatedAt        time.Time            `db:"created_at"`
 }
+
+// PayoutMethodCatalog is a row of the payout_methods catalog: a BANK/EWALLET
+// channel with its name, fee config, and per-channel amount limits. It mirrors
+// the api module's payout_methods model and backs the admin CRUD.
+type PayoutMethodCatalog struct {
+	ID                 int        `db:"id" json:"id"`
+	MethodType         MethodType `db:"method_type" json:"methodType"`
+	Code               string     `db:"code" json:"code"`
+	Name               string     `db:"name" json:"name"`
+	FeeType            string     `db:"fee_type" json:"feeType"`
+	FeeFlat            int        `db:"fee_flat" json:"feeFlat"`
+	FeePercent         float64    `db:"fee_percent" json:"feePercent"`
+	FeeMin             int        `db:"fee_min" json:"feeMin"`
+	FeeMax             int        `db:"fee_max" json:"feeMax"`
+	MinAmount          int        `db:"min_amount" json:"minAmount"`
+	MaxAmount          int        `db:"max_amount" json:"maxAmount"`
+	LogoURL            *string    `db:"logo_url" json:"logoUrl,omitempty"`
+	DisplayOrder       int        `db:"display_order" json:"displayOrder"`
+	IsActive           bool       `db:"is_active" json:"isActive"`
+	IsMaintenance      bool       `db:"is_maintenance" json:"isMaintenance"`
+	MaintenanceMessage *string    `db:"maintenance_message" json:"maintenanceMessage,omitempty"`
+	CreatedAt          time.Time  `db:"created_at" json:"createdAt"`
+	UpdatedAt          time.Time  `db:"updated_at" json:"updatedAt"`
+}

@@ -92,6 +92,35 @@ func (h *AdminPayoutHandler) UpdateRoute(c *gin.Context) {
 	utils.Success(c, http.StatusOK, "Payout route updated", resp)
 }
 
+// ListMethods returns the payout method catalog (admin view).
+func (h *AdminPayoutHandler) ListMethods(c *gin.Context) {
+	resp, err := h.svc.ListMethods(c.Request.Context())
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.Success(c, http.StatusOK, "Payout methods retrieved", resp)
+}
+
+// UpdateMethod applies editable fields to a payout method catalog row.
+func (h *AdminPayoutHandler) UpdateMethod(c *gin.Context) {
+	id, ok := intParam(c, "id")
+	if !ok {
+		return
+	}
+	var req service.AdminUpdatePayoutMethodRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.Error(c, http.StatusBadRequest, "INVALID_REQUEST", "Invalid request body")
+		return
+	}
+	resp, err := h.svc.UpdateMethod(c.Request.Context(), id, req)
+	if err != nil {
+		h.handleError(c, err)
+		return
+	}
+	utils.Success(c, http.StatusOK, "Payout method updated", resp)
+}
+
 func bindAdminPayoutsRequest(c *gin.Context) service.AdminListPayoutsRequest {
 	req := service.AdminListPayoutsRequest{}
 	if v := c.Query("status"); v != "" {

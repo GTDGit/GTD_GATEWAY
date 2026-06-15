@@ -3,13 +3,12 @@ package models
 import "time"
 
 // ----------------------------------------------------------------------------
-// QRIS document portal (shared DB, migration 000065).
+// File portal (read model).
 //
-// A bundle is one shareable, token-gated link delivering a merchant's
-// onboarding documents (KTP, selfie with KTP, business-location photo, plus one
-// extra photo) to Nobu. The gateway owns upload + bundle creation; the
-// files-qris portal service owns token-validated viewing/download/confirm.
-// Files are ALWAYS private in S3 — never served via a public URL.
+// The standalone files portal (dev-files.gtd.co.id) owns upload + delivery and
+// writes these tables: file_bundles, file_items, file_access_logs. The gateway
+// is READ-ONLY here — admins inspect links and their status and may force-close
+// (revoke) a bundle. The gateway no longer uploads.
 // ----------------------------------------------------------------------------
 
 // QRISDocStatus is the lifecycle state of a bundle.
@@ -20,46 +19,44 @@ const (
 	QRISDocStatusRevoked QRISDocStatus = "revoked" // confirmed/closed — all access returns 403
 )
 
-// QRISDocType classifies a single file within a bundle.
-type QRISDocType string
+// QRISDocAccessMode controls a bundle's link lifetime.
+type QRISDocAccessMode string
 
 const (
-	QRISDocTypeKTP              QRISDocType = "ktp"
-	QRISDocTypeSelfieKTP        QRISDocType = "selfie_ktp"
-	QRISDocTypeBusinessLocation QRISDocType = "business_location"
-	QRISDocTypeExtra            QRISDocType = "extra"
+	QRISDocAccessOpen QRISDocAccessMode = "open" // free repeat access until revoke/expiry
+	QRISDocAccessOnce QRISDocAccessMode = "once" // revoked after the first download
 )
 
-// QRISDocBundle is one shareable link for one merchant.
+// QRISDocBundle is one shareable link (row in file_bundles).
 type QRISDocBundle struct {
-	ID             int            `db:"id" json:"id"`
-	Token          string         `db:"token" json:"token"`
-	MerchantName   string         `db:"merchant_name" json:"merchantName"`
-	QRISMerchantID *int           `db:"qris_merchant_id" json:"qrisMerchantId,omitempty"`
-	Status         QRISDocStatus  `db:"status" json:"status"`
-	Note           *string        `db:"note" json:"note,omitempty"`
-	CreatedBy      *string        `db:"created_by" json:"createdBy,omitempty"`
-	ConfirmedAt    *time.Time     `db:"confirmed_at" json:"confirmedAt,omitempty"`
-	ExpiresAt      *time.Time     `db:"expires_at" json:"expiresAt,omitempty"`
-	CreatedAt      time.Time      `db:"created_at" json:"createdAt"`
-	UpdatedAt      time.Time      `db:"updated_at" json:"updatedAt"`
+	ID          int               `db:"id" json:"id"`
+	Token       string            `db:"token" json:"token"`
+	Title       string            `db:"title" json:"title"`
+	Note        *string           `db:"note" json:"note,omitempty"`
+	AccessMode  QRISDocAccessMode `db:"access_mode" json:"accessMode"`
+	Status      QRISDocStatus     `db:"status" json:"status"`
+	CreatedBy   *string           `db:"created_by" json:"createdBy,omitempty"`
+	ConfirmedAt *time.Time        `db:"confirmed_at" json:"confirmedAt,omitempty"`
+	ExpiresAt   *time.Time        `db:"expires_at" json:"expiresAt,omitempty"`
+	CreatedAt   time.Time         `db:"created_at" json:"createdAt"`
+	UpdatedAt   time.Time         `db:"updated_at" json:"updatedAt"`
 
 	// Files is populated on reads that join the bundle's files. Not a column.
 	Files []QRISDocFile `db:"-" json:"files,omitempty"`
 }
 
-// QRISDocFile is one stored document within a bundle.
+// QRISDocFile is one stored file within a bundle (row in file_items).
 type QRISDocFile struct {
-	ID          int         `db:"id" json:"id"`
-	BundleID    int         `db:"bundle_id" json:"bundleId"`
-	Token       string      `db:"token" json:"token"`
-	DocType     QRISDocType `db:"doc_type" json:"docType"`
-	FileName    string      `db:"file_name" json:"fileName"`
-	ContentType string      `db:"content_type" json:"contentType"`
-	SizeBytes   int64       `db:"size_bytes" json:"sizeBytes"`
-	StorageKey  string      `db:"storage_key" json:"-"` // private S3 key — never exposed in JSON
-	Checksum    *string     `db:"checksum" json:"checksum,omitempty"`
-	CreatedAt   time.Time   `db:"created_at" json:"createdAt"`
+	ID          int       `db:"id" json:"id"`
+	BundleID    int       `db:"bundle_id" json:"bundleId"`
+	Token       string    `db:"token" json:"token"`
+	DocName     *string   `db:"doc_name" json:"docName,omitempty"`
+	FileName    string    `db:"file_name" json:"fileName"`
+	ContentType string    `db:"content_type" json:"contentType"`
+	SizeBytes   int64     `db:"size_bytes" json:"sizeBytes"`
+	StorageKey  string    `db:"storage_key" json:"-"` // private S3 key — never exposed in JSON
+	Checksum    *string   `db:"checksum" json:"checksum,omitempty"`
+	CreatedAt   time.Time `db:"created_at" json:"createdAt"`
 }
 
 // QRISDocAccessAction enumerates audited portal actions (PDP trail).
@@ -70,10 +67,10 @@ const (
 	QRISDocActionDownload  QRISDocAccessAction = "download"
 	QRISDocActionConfirm   QRISDocAccessAction = "confirm"
 	QRISDocActionForbidden QRISDocAccessAction = "forbidden"
+	QRISDocActionUpload    QRISDocAccessAction = "upload"
 )
 
-// QRISDocAccessLog is one PDP audit entry. bundle_id/file_id are nullable so a
-// forbidden attempt on an unknown token can still be recorded.
+// QRISDocAccessLog is one PDP audit entry (row in file_access_logs).
 type QRISDocAccessLog struct {
 	ID        int                 `db:"id" json:"id"`
 	BundleID  *int                `db:"bundle_id" json:"bundleId,omitempty"`

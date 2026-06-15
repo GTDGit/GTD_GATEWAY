@@ -376,3 +376,103 @@ func payoutRawToAny(raw models.NullableRawMessage) any {
 	}
 	return v
 }
+
+// ---------------------------------------------------------------------------
+// Payout methods catalog (per-channel name, fee, amount limits)
+// ---------------------------------------------------------------------------
+
+// AdminUpdatePayoutMethodRequest carries editable payout_methods fields. Pointer
+// fields are only applied when present.
+type AdminUpdatePayoutMethodRequest struct {
+	Name               *string  `json:"name"`
+	FeeType            *string  `json:"feeType"`
+	FeeFlat            *int     `json:"feeFlat"`
+	FeePercent         *float64 `json:"feePercent"`
+	FeeMin             *int     `json:"feeMin"`
+	FeeMax             *int     `json:"feeMax"`
+	MinAmount          *int     `json:"minAmount"`
+	MaxAmount          *int     `json:"maxAmount"`
+	LogoURL            *string  `json:"logoUrl"`
+	DisplayOrder       *int     `json:"displayOrder"`
+	IsActive           *bool    `json:"isActive"`
+	IsMaintenance      *bool    `json:"isMaintenance"`
+	MaintenanceMessage *string  `json:"maintenanceMessage"`
+}
+
+// AdminListPayoutMethodsResponse wraps the payout method catalog list.
+type AdminListPayoutMethodsResponse struct {
+	Methods []models.PayoutMethodCatalog `json:"methods"`
+}
+
+// ListMethods returns every payout_methods catalog row (admin view).
+func (s *AdminPayoutService) ListMethods(ctx context.Context) (*AdminListPayoutMethodsResponse, error) {
+	rows, err := s.payoutRepo.ListMethods(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return &AdminListPayoutMethodsResponse{Methods: rows}, nil
+}
+
+// UpdateMethod applies the editable fields of a payout_methods catalog row.
+func (s *AdminPayoutService) UpdateMethod(ctx context.Context, id int, req AdminUpdatePayoutMethodRequest) (*models.PayoutMethodCatalog, error) {
+	m, err := s.payoutRepo.GetMethodByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, newPaymentError(404, "PAYOUT_METHOD_NOT_FOUND", "Payout method not found", nil)
+		}
+		return nil, err
+	}
+	if req.Name != nil {
+		m.Name = *req.Name
+	}
+	if req.FeeType != nil {
+		m.FeeType = *req.FeeType
+	}
+	if req.FeeFlat != nil {
+		m.FeeFlat = *req.FeeFlat
+	}
+	if req.FeePercent != nil {
+		m.FeePercent = *req.FeePercent
+	}
+	if req.FeeMin != nil {
+		m.FeeMin = *req.FeeMin
+	}
+	if req.FeeMax != nil {
+		m.FeeMax = *req.FeeMax
+	}
+	if req.MinAmount != nil {
+		m.MinAmount = *req.MinAmount
+	}
+	if req.MaxAmount != nil {
+		m.MaxAmount = *req.MaxAmount
+	}
+	if req.LogoURL != nil {
+		v := *req.LogoURL
+		if v == "" {
+			m.LogoURL = nil
+		} else {
+			m.LogoURL = &v
+		}
+	}
+	if req.DisplayOrder != nil {
+		m.DisplayOrder = *req.DisplayOrder
+	}
+	if req.IsActive != nil {
+		m.IsActive = *req.IsActive
+	}
+	if req.IsMaintenance != nil {
+		m.IsMaintenance = *req.IsMaintenance
+	}
+	if req.MaintenanceMessage != nil {
+		v := *req.MaintenanceMessage
+		if v == "" {
+			m.MaintenanceMessage = nil
+		} else {
+			m.MaintenanceMessage = &v
+		}
+	}
+	if err := s.payoutRepo.UpdateMethod(ctx, m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}

@@ -156,7 +156,7 @@ Phase 1 provider routing (dispatcher: `payment_methods.provider` column):
 - **Xendit** — Indomaret, Alfamart retail
 - **OVO** — disabled in Phase 1 (`is_active=false`)
 
-Client webhooks use dedicated `payment_callback_url` + `payment_callback_secret` (falls back to generic `callback_url`/`callback_secret`). Signature header: `X-GTD-Payment-Signature: sha256=<hex>`. Retry backoff: 30s/1m/5m/30m/2h (max 5 attempts). QRIS provider is switchable from admin UI. Pakailink dual-webhook dedupe: `callbackType=settlement` is ACK-only.
+Client webhooks use dedicated `payment_callback_url` + `payment_callback_secret` (falls back to generic `callback_url`/`callback_secret`). Signature header: `X-GTD-Signature: sha256=<hex>`. Retry backoff: 30s/1m/5m/30m/2h (max 5 attempts). QRIS provider is switchable from admin UI. Pakailink dual-webhook dedupe: `callbackType=settlement` is ACK-only.
 
 Workers: `PaymentStatusWorker` (pending inquiry), `PaymentExpiryWorker` (mark expired), `PaymentCallbackWorker` (retry client webhooks).
 

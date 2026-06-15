@@ -21,7 +21,6 @@ import (
 	"github.com/GTDGit/gtd_gateway/internal/repository"
 	"github.com/GTDGit/gtd_gateway/internal/service"
 	"github.com/GTDGit/gtd_gateway/internal/sse"
-	"github.com/GTDGit/gtd_gateway/internal/storage"
 	"github.com/GTDGit/gtd_gateway/internal/utils"
 )
 
@@ -57,22 +56,6 @@ func main() {
 	}
 	defer redisClient.Close()
 	log.Info().Msg("redis connected successfully")
-
-	// 3c. Initialize S3 storage for the QRIS document portal. Nil-safe: when
-	// S3 is not configured the gateway still boots; upload actions return a
-	// clear error at runtime instead of crashing on start.
-	var docStore storage.Storage
-	if cfg.Storage.Bucket != "" {
-		s3store, serr := storage.NewS3Storage(context.Background(), cfg.Storage)
-		if serr != nil {
-			log.Warn().Err(serr).Msg("qris doc storage init failed; uploads disabled")
-		} else {
-			docStore = s3store
-			log.Info().Str("bucket", cfg.Storage.Bucket).Str("region", cfg.Storage.Region).Msg("qris doc storage ready")
-		}
-	} else {
-		log.Warn().Msg("S3_BUCKET not set; qris doc uploads disabled")
-	}
 
 	// 4. Initialize repositories
 	clientRepo := repository.NewClientRepository(db)
@@ -125,13 +108,15 @@ func main() {
 	// adminPayoutSvc only needs payoutRepo for listing/viewing + route management.
 	adminPayoutSvc := service.NewAdminPayoutService(payoutRepo)
 
-	// QRIS: gateway owns merchant CRUD + payment views. Pakailink generate is
-	// delegated to the api service over the internal-token-guarded proxy.
-	pakailinkProxy := service.NewPakailinkProxy(cfg.APIInternalURL, cfg.InternalAPIToken)
-	qrisSvc := service.NewQRISService(qrisMerchantRepo, qrisPaymentRepo, pakailinkProxy)
+	// QRIS: gateway owns merchant CRUD + payment views (read from the shared DB).
+	// Nobu onboarding (registration intake, Excel batches, activation + QR
+	// generation, client webhooks) lives in the api service; admin requests for
+	// those are proxied to api with the caller's admin JWT (shared JWT_SECRET).
+	apiAdminProxy := service.NewAPIAdminProxy(cfg.APIInternalURL)
+	qrisSvc := service.NewQRISService(qrisMerchantRepo, qrisPaymentRepo)
 
 	// QRIS document portal: upload to private S3 + token-gated shareable links.
-	qrisDocSvc := service.NewQRISDocService(qrisDocRepo, docStore, cfg.Storage.KeyPrefix, cfg.FilesBaseURL)
+	qrisDocSvc := service.NewQRISDocService(qrisDocRepo, cfg.FilesBaseURL)
 
 	// 6. Initialize handlers (admin + health only)
 	handlers := &Handlers{
@@ -147,7 +132,7 @@ func main() {
 		AdminPayment:      handler.NewAdminPaymentHandler(adminPaymentSvc),
 		AdminReconciliation: handler.NewAdminReconciliationHandler(adminReconciliationSvc),
 		AdminPayout:       handler.NewAdminPayoutHandler(adminPayoutSvc),
-		QRIS:              handler.NewQRISHandler(qrisSvc),
+		QRIS:              handler.NewQRISHandler(qrisSvc, apiAdminProxy),
 		QRISDoc:           handler.NewQRISDocHandler(qrisDocSvc),
 	}
 
@@ -321,6 +306,8 @@ func setupRoutes(router *gin.Engine, handlers *Handlers, jwtMiddleware *middlewa
 		admin.GET("/payouts/stats", handlers.AdminPayout.Stats)
 		admin.GET("/payouts/routes", handlers.AdminPayout.ListRoutes)
 		admin.PUT("/payouts/routes/:id", handlers.AdminPayout.UpdateRoute)
+		admin.GET("/payout-methods", handlers.AdminPayout.ListMethods)
+		admin.PUT("/payout-methods/:id", handlers.AdminPayout.UpdateMethod)
 		admin.GET("/payouts/:id", handlers.AdminPayout.GetPayout)
 		admin.GET("/payouts/:id/callbacks", handlers.AdminPayout.ListCallbacks)
 
@@ -333,12 +320,18 @@ func setupRoutes(router *gin.Engine, handlers *Handlers, jwtMiddleware *middlewa
 		admin.POST("/qris/merchants", handlers.QRIS.CreateMerchant)
 		admin.GET("/qris/merchants/:id", handlers.QRIS.GetMerchant)
 		admin.PUT("/qris/merchants/:id", handlers.QRIS.UpdateMerchant)
-		admin.POST("/qris/merchants/:id/pakailink-generate", handlers.QRIS.RequestPakailinkQR)
 		admin.GET("/qris/payments", handlers.QRIS.ListPayments)
 
-		// QRIS document portal: upload onboarding docs → private S3 → shareable
-		// token-gated link delivered to Nobu. Files are never public.
-		admin.POST("/qris/documents", handlers.QRISDoc.CreateBundle)
+		// Nobu onboarding — proxied to the api service (which owns the Nobu
+		// generate client + client webhooks + rendered Excel batch files).
+		admin.GET("/qris/registrations", handlers.QRIS.ListRegistrations)
+		admin.POST("/qris/registrations/:id/activate", handlers.QRIS.ActivateRegistration)
+		admin.GET("/qris/batches", handlers.QRIS.ListBatches)
+		admin.GET("/qris/batches/:id/download", handlers.QRIS.DownloadBatch)
+		admin.POST("/qris/batches/:id/sent", handlers.QRIS.MarkBatchSent)
+
+		// File portal links (read-only): list/inspect bundles + force-close.
+		// Upload lives in the standalone portal (dev-files.gtd.co.id).
 		admin.GET("/qris/documents", handlers.QRISDoc.ListBundles)
 		admin.GET("/qris/documents/:token", handlers.QRISDoc.GetBundle)
 		admin.POST("/qris/documents/:token/revoke", handlers.QRISDoc.RevokeBundle)

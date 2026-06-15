@@ -2,6 +2,7 @@ package handler
 
 import (
 	"errors"
+	"io"
 	"net/http"
 	"strconv"
 
@@ -12,14 +13,15 @@ import (
 )
 
 // QRISHandler exposes admin CRUD over static-QRIS merchants and read-only
-// listing of successful QRIS payments. Pakailink register/generate is delegated
-// to the api service through the QRISService proxy.
+// listing of successful QRIS payments. Nobu onboarding (registrations, Excel
+// batches, activation) is delegated to the api service through APIAdminProxy.
 type QRISHandler struct {
 	qrisSvc *service.QRISService
+	proxy   *service.APIAdminProxy
 }
 
-func NewQRISHandler(qrisSvc *service.QRISService) *QRISHandler {
-	return &QRISHandler{qrisSvc: qrisSvc}
+func NewQRISHandler(qrisSvc *service.QRISService, proxy *service.APIAdminProxy) *QRISHandler {
+	return &QRISHandler{qrisSvc: qrisSvc, proxy: proxy}
 }
 
 // ---------------------------------------------------------------------------
@@ -100,18 +102,69 @@ func (h *QRISHandler) UpdateMerchant(c *gin.Context) {
 	utils.Success(c, http.StatusOK, "Merchant updated", m)
 }
 
-// RequestPakailinkQR drives the api-side generate flow and persists the result.
-func (h *QRISHandler) RequestPakailinkQR(c *gin.Context) {
+// ---------------------------------------------------------------------------
+// Nobu onboarding — proxied to the api service (admin JWT passed through)
+// ---------------------------------------------------------------------------
+
+// ListRegistrations → GET api /v1/admin/qris/registrations
+func (h *QRISHandler) ListRegistrations(c *gin.Context) {
+	h.forward(c, http.MethodGet, "/v1/admin/qris/registrations?"+c.Request.URL.RawQuery, nil)
+}
+
+// ActivateRegistration → POST api /v1/admin/qris/registrations/:id/activate
+func (h *QRISHandler) ActivateRegistration(c *gin.Context) {
 	id, ok := intParam(c, "id")
 	if !ok {
 		return
 	}
-	m, err := h.qrisSvc.RequestPakailinkQR(c.Request.Context(), id)
+	body, _ := io.ReadAll(c.Request.Body)
+	h.forward(c, http.MethodPost, "/v1/admin/qris/registrations/"+strconv.Itoa(id)+"/activate", body)
+}
+
+// ListBatches → GET api /v1/admin/qris/batches
+func (h *QRISHandler) ListBatches(c *gin.Context) {
+	h.forward(c, http.MethodGet, "/v1/admin/qris/batches?"+c.Request.URL.RawQuery, nil)
+}
+
+// DownloadBatch → GET api /v1/admin/qris/batches/:id/download (binary passthrough)
+func (h *QRISHandler) DownloadBatch(c *gin.Context) {
+	id, ok := intParam(c, "id")
+	if !ok {
+		return
+	}
+	h.forward(c, http.MethodGet, "/v1/admin/qris/batches/"+strconv.Itoa(id)+"/download", nil)
+}
+
+// MarkBatchSent → POST api /v1/admin/qris/batches/:id/sent
+func (h *QRISHandler) MarkBatchSent(c *gin.Context) {
+	id, ok := intParam(c, "id")
+	if !ok {
+		return
+	}
+	h.forward(c, http.MethodPost, "/v1/admin/qris/batches/"+strconv.Itoa(id)+"/sent", nil)
+}
+
+// forward proxies the request to the api admin endpoint, passing the caller's
+// Authorization header through (api + gateway share JWT_SECRET) and relaying the
+// upstream status, content-type, and body verbatim.
+func (h *QRISHandler) forward(c *gin.Context, method, path string, body []byte) {
+	if h.proxy == nil || !h.proxy.Enabled() {
+		utils.Error(c, http.StatusServiceUnavailable, "PROXY_UNAVAILABLE", "api admin proxy is not configured")
+		return
+	}
+	resp, err := h.proxy.Forward(c.Request.Context(), method, path, c.GetHeader("Authorization"), body)
 	if err != nil {
 		h.handleError(c, err)
 		return
 	}
-	utils.Success(c, http.StatusOK, "QRIS generated", m)
+	contentType := resp.ContentType
+	if contentType == "" {
+		contentType = "application/json"
+	}
+	if resp.ContentDisposition != "" {
+		c.Header("Content-Disposition", resp.ContentDisposition)
+	}
+	c.Data(resp.StatusCode, contentType, resp.Body)
 }
 
 // ---------------------------------------------------------------------------

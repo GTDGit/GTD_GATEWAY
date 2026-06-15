@@ -232,3 +232,59 @@ func (r *PayoutRepository) ListCallbacksByPayoutID(ctx context.Context, payoutID
 	}
 	return rows, nil
 }
+
+// ---------------------------------------------------------------------------
+// Payout methods catalog (per-channel name, fee, amount limits)
+// ---------------------------------------------------------------------------
+
+const payoutMethodColumns = `id, method_type, code, name, fee_type, fee_flat, fee_percent,
+		fee_min, fee_max, min_amount, max_amount, logo_url, display_order,
+		is_active, is_maintenance, maintenance_message, created_at, updated_at`
+
+// ListMethods returns every payout_methods row ordered for display (admin view).
+func (r *PayoutRepository) ListMethods(ctx context.Context) ([]models.PayoutMethodCatalog, error) {
+	q := `SELECT ` + payoutMethodColumns + ` FROM payout_methods
+		ORDER BY method_type, display_order ASC, id ASC`
+	rows := []models.PayoutMethodCatalog{}
+	if err := r.db.SelectContext(ctx, &rows, q); err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// GetMethodByID returns a single payout_methods row by primary key.
+func (r *PayoutRepository) GetMethodByID(ctx context.Context, id int) (*models.PayoutMethodCatalog, error) {
+	q := `SELECT ` + payoutMethodColumns + ` FROM payout_methods WHERE id = $1 LIMIT 1`
+	var m models.PayoutMethodCatalog
+	if err := r.db.GetContext(ctx, &m, q, id); err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+// UpdateMethod mutates the editable fields of a payout_methods row.
+func (r *PayoutRepository) UpdateMethod(ctx context.Context, m *models.PayoutMethodCatalog) error {
+	const q = `
+		UPDATE payout_methods
+		SET name = $2,
+		    fee_type = $3,
+		    fee_flat = $4,
+		    fee_percent = $5,
+		    fee_min = $6,
+		    fee_max = $7,
+		    min_amount = $8,
+		    max_amount = $9,
+		    logo_url = $10,
+		    display_order = $11,
+		    is_active = $12,
+		    is_maintenance = $13,
+		    maintenance_message = $14,
+		    updated_at = NOW()
+		WHERE id = $1
+		RETURNING updated_at`
+	return r.db.QueryRowContext(ctx, q,
+		m.ID, m.Name, m.FeeType, m.FeeFlat, m.FeePercent, m.FeeMin, m.FeeMax,
+		m.MinAmount, m.MaxAmount, m.LogoURL, m.DisplayOrder,
+		m.IsActive, m.IsMaintenance, m.MaintenanceMessage,
+	).Scan(&m.UpdatedAt)
+}

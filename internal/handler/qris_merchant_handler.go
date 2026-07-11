@@ -121,6 +121,16 @@ func (h *QRISHandler) ActivateRegistration(c *gin.Context) {
 	h.forward(c, http.MethodPost, "/v1/admin/qris/registrations/"+strconv.Itoa(id)+"/activate", body)
 }
 
+// RejectRegistration → POST api /v1/admin/qris/registrations/:id/reject
+func (h *QRISHandler) RejectRegistration(c *gin.Context) {
+	id, ok := intParam(c, "id")
+	if !ok {
+		return
+	}
+	body, _ := io.ReadAll(c.Request.Body)
+	h.forward(c, http.MethodPost, "/v1/admin/qris/registrations/"+strconv.Itoa(id)+"/reject", body)
+}
+
 // ListBatches → GET api /v1/admin/qris/batches
 func (h *QRISHandler) ListBatches(c *gin.Context) {
 	h.forward(c, http.MethodGet, "/v1/admin/qris/batches?"+c.Request.URL.RawQuery, nil)

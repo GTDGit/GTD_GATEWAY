@@ -326,6 +326,7 @@ func setupRoutes(router *gin.Engine, handlers *Handlers, jwtMiddleware *middlewa
 		// generate client + client webhooks + rendered Excel batch files).
 		admin.GET("/qris/registrations", handlers.QRIS.ListRegistrations)
 		admin.POST("/qris/registrations/:id/activate", handlers.QRIS.ActivateRegistration)
+		admin.POST("/qris/registrations/:id/reject", handlers.QRIS.RejectRegistration)
 		admin.GET("/qris/batches", handlers.QRIS.ListBatches)
 		admin.GET("/qris/batches/:id/download", handlers.QRIS.DownloadBatch)
 		admin.POST("/qris/batches/:id/sent", handlers.QRIS.MarkBatchSent)
